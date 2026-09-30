@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import * as lib from "../../../packages/lib/src/index";
 import { createWtc, DockerCliRuntime, type Wtc } from "../../../packages/lib/src/index";
+import { portableServers } from "../../../packages/lib/src/agent/bundle";
 
 const E2E = process.env.WTC_AGENT_E2E === "1";
 const ID = "wtcag";
@@ -64,7 +65,8 @@ describe.skipIf(!E2E)("wtc agent (real logins)", () => {
     expect((await inC("test -d ~/.wtc-agent || echo gone")).stdout.trim()).toBe("gone");
     const hostJson = JSON.parse(readFileSync(join(homedir(), ".claude.json"), "utf8"));
     const cj = JSON.parse((await inC("cat ~/.claude.json")).stdout);
-    expect(Object.keys(cj.mcpServers ?? {}).sort()).toEqual(Object.keys(hostJson.mcpServers ?? {}).sort());
+    const expected = portableServers(hostJson.mcpServers ?? {}, homedir());
+    expect(Object.keys(cj.mcpServers ?? {}).sort()).toEqual(Object.keys(expected).sort());
     expect(cj.projects["/workspace/app"].hasTrustDialogAccepted).toBe(true);
     const skills = join(homedir(), ".claude", "skills");
     for (const s of existsSync(skills) ? readdirSync(skills) : []) {

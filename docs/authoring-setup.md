@@ -72,6 +72,7 @@ Not used by the example. An `init.sh` clone can borrow objects from an existing 
 - `socksBind` defaults to `0.0.0.0`: **anyone on the LAN** can reach every `127.0.0.1` service in the container and, through it, the host (`host.docker.internal`) and the container's networks.
 - Restrict with `socksBind: "127.0.0.1"` or require credentials with `socksAuth: { user, pass }` (plain text in the manifest; also passed as env to the container).
 - Both are creation-time settings: change requires `wtc rm` and `up`.
+- The tunnel address is **dynamic by design**: the port is picked from `socksHostPortRange` at creation and may differ after `rm` + `up`. Clients get the current one from `wtc tunnel`. Pin it with `socksHostPort` only if something truly needs a fixed port.
 - Clients must use `socks5h://` and drop `localhost` from `NO_PROXY` (`wtc tunnel` prints hints).
 - On macOS the firewall must allow `limactl` for LAN access.
 

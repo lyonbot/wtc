@@ -5,7 +5,7 @@ description: Run an isolated docker dev container per git worktree with the `wtc
 
 # wtc
 
-One docker container per worktree/instance, defined by a `wtc.setup.ts` in the project. Each instance gets a fixed host SOCKS5 port so the host can reach the container's `127.0.0.1` services.
+One docker container per worktree/instance, defined by a `wtc.setup.ts` in the project. Each instance gets a host SOCKS5 port so the host can reach the container's `127.0.0.1` services. The tunnel address (IP:port) is dynamic: call `wtc tunnel` each time you need it; never cache or hardcode it.
 
 ## When to use
 
@@ -28,7 +28,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc run <name> <script> [-- args]` - manifest script in the container; exits with its exit code.
 - `wtc check <name> [--json]` - run health checks now.
 - `wtc shell <name>` - interactive shell (needs a TTY; exits with the shell's code).
-- `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints.
+- `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state.
 - `wtc doctor [--json]` - check runtime, colima mounts, firewall, toolchain.

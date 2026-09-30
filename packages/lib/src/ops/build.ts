@@ -16,12 +16,19 @@ export async function build(
   const m = setup.manifest;
   const ref = imageRef(m.id, await computeImageHash(setup));
   if (!o.force && (await hasImage(ctx, ref))) return { ref, skipped: true };
-  await rt.build({
-    context: resolve(setup.dir, m.image.context),
-    dockerfile: m.image.dockerfile,
-    tag: ref,
-    buildArgs: m.image.buildArgs,
-    ...(o.onLog ? { onLog: o.onLog } : {}),
-  });
+  try {
+    await rt.build({
+      context: resolve(setup.dir, m.image.context),
+      dockerfile: m.image.dockerfile,
+      tag: ref,
+      buildArgs: m.image.buildArgs,
+      ...(o.onLog ? { onLog: o.onLog } : {}),
+    });
+  } catch (e) {
+    // concurrent builds of the same content-hashed tag (e.g. parallel `up`): the loser fails with
+    // "image ... already exists" — the tag it wanted is there, so that is success
+    if (await hasImage(ctx, ref)) return { ref, skipped: true };
+    throw e;
+  }
   return { ref, skipped: false };
 }

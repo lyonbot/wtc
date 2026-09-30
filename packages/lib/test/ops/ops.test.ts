@@ -32,6 +32,19 @@ describe("build", () => {
     expect((await build(t.ctx, { force: true })).skipped).toBe(false);
     expect(ops(t).filter((o) => o === "build").length).toBe(2);
   });
+
+  test("a failed build is success when a concurrent build produced the tag", async () => {
+    const t = setup();
+    const hash = await computeImageHash(t.ctx.setup);
+    t.rt.build = async (o) => {
+      t.rt.images.push({ ref: o.tag, id: "sha256:other" }); // the concurrent winner
+      throw new Error(`image "docker.io/library/${o.tag}": already exists`);
+    };
+    expect(await build(t.ctx, {})).toEqual({ ref: `wtc-demo:${hash}`, skipped: true });
+    t.rt.images = [];
+    t.rt.build = async () => { throw new Error("boom"); };
+    expect((await err(build(t.ctx, {})))?.message ?? "").toContain("boom");
+  });
 });
 
 describe("run / check / shell", () => {

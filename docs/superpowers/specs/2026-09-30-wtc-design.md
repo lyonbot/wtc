@@ -75,7 +75,7 @@ flowchart LR
 | `packages/lib/src/setup/` | 加载 `wtc.setup.ts`，zod 校验，`defineSetup()` 导出 |
 | `packages/lib/src/instance/` | 生命周期 up/start/restart/stop/rm/ls，状态合并 |
 | `packages/lib/src/status/` | 读取/监听 `.wtc/run/<name>/status.json` |
-| `packages/lib/src/{health,scripts,tunnel,open,gc,doctor}/` | 各子功能 |
+| `packages/lib/src/health/`、`packages/lib/src/ops/` | health 聚合；build / exec(run·check·shell) / logs / tunnel / open / gc / doctor |
 | `packages/cli/` | 参数解析 + 渲染，零业务逻辑；bin 名 `wtc` |
 | `kit/` | 挂载到容器 `/wtc/bin`：bash 脚本 `wtc-entry`、`wtc-signal`、`wtc-install`，以及 Go 静态二进制 `wtc-kit`（linux/amd64+arm64；子命令 `socks`、`forward`、`status`） |
 | `examples/setup-basic/` | 参考 setup，兼作集成测试 fixture |
@@ -83,7 +83,7 @@ flowchart LR
 | `docs/authoring-setup.md` | setup 编写指南（§15） |
 
 - **技术栈**：Bun + TypeScript monorepo（bun workspaces）；分发用 `bun build --compile`。
-- **kit 分发**：kit 嵌入 CLI 二进制，首次运行时解压到 `~/.cache/wtc/kit/<version>/` 后只读挂载。路径带版本号，升级 wtc 不影响运行中的容器。
+- **kit 分发**：kit 嵌入 CLI 二进制，首次运行时解压到 `~/.cache/wtc/kit/<version>-<arch>-<contenthash>/`（`WTC_CACHE_DIR` 可改根目录）后只读挂载。路径带版本、架构与内容哈希，升级 wtc 不影响运行中的容器。
 - **为什么 host 侧不是 Go**：manifest 需要 TS（类型 + 逻辑），未来 webui 要共享类型；runtime 走 CLI，Go SDK 的优势用不上。
 - **为什么容器内用 Go `wtc-kit`**：静态 socat 难以构建，microsocks 需要按架构编 C；Go 交叉编译一个二进制就能替代 socat / microsocks / jq，镜像零额外依赖。
 
@@ -113,6 +113,8 @@ flowchart LR
 
 ## 5. Setup 目录与 manifest
 
+`wtc.setup.ts` 中 `import { defineSetup } from "wtc"`：`wtc` 是 CLI 注册的虚拟模块（`bun` 与编译产物均可用，`@wtc/lib` 同理，见 `packages/cli/src/main.ts`）；暂无编辑器类型提示，直接 `export default {...}` 亦可。
+
 ```
 setups/basic/
 ├── wtc.setup.ts          # export default defineSetup({...})
@@ -133,7 +135,7 @@ setups/basic/
 | `image` | `{ context?, dockerfile?, buildArgs? }`，默认 `context: "image"` |
 | `init` | 初始化脚本路径，默认 `init.sh` |
 | `params` | `{ KEY: { description, default?, required?, pattern? } }`，原样作为 env 注入（明文，不适合放密钥）；webui 据此渲染表单 |
-| `cwd` | shell / run / open 的默认目录 |
+| `cwd` | shell / run / open 的默认目录，默认 `/workspace`（同时是 `wtc-install` 的默认安装目录） |
 | `scripts` | `{ name: { run, description } }` |
 | `checks` | `{ name: { run, timeout? } }`，多个子项聚合为整体 health |
 | `hostForwards` | `number[]`，如 `[3306, 6379]`：容器内 `wtc-kit forward` 监听 `127.0.0.1:<p>` → `host.docker.internal:<p>` |
@@ -158,7 +160,7 @@ mounts: [
 ```
 
 - `setup` 级：同 setup 的实例共享，`rm` 不删；`instance` 级：随 `wtc rm` 删除；`external`：wtc 既不创建也不删除。
-- **校验**：target 不得与 `/wtc/*`、`/pnpm` 冲突；bind source 展开 `~` 后校验存在，在 colima 上还须位于已挂载目录内。
+- **校验**：target 不得与 `/wtc/*`、`/pnpm` 冲突；bind source 展开 `~`、相对路径按 **setup 目录**解析，随后校验存在，在 colima 上还须位于已挂载目录内。
 
 ### 5.3 pnpm store 策略
 
@@ -173,10 +175,10 @@ mounts: [
 | 容器路径 | 来源 | 模式 |
 |---|---|---|
 | `/pnpm` | `wtc-<setupId>.pnpm` | rw |
-| `/wtc/bin` | `~/.cache/wtc/kit/<version>/` | ro |
+| `/wtc/bin` | `~/.cache/wtc/kit/<version>-<arch>-<contenthash>/` | ro |
 | `/wtc/setup` | setup 目录（改 init.sh / scripts 无需重建镜像） | ro |
 | `/wtc/ssh` | `.wtc/run/<name>/ssh/`（wtc 生成的 `config`、`known_hosts`） | ro |
-| `/wtc/ssh-agent.sock` | 宿主机 / VM 的 agent socket（§2） | rw |
+| `/wtc/ssh-agent.sock` | 宿主机 / VM 的 agent socket（§2）；按 `-v` 语义挂载，源缺失时容忍（docker 自动创建空目录），`wtc-entry` 仅在其为 socket 时设置 `SSH_AUTH_SOCK` | rw |
 | `/wtc/run` | `.wtc/run/<name>/` | rw |
 | `/wtc/log` | `.wtc/log/<name>/` | rw |
 
@@ -188,16 +190,16 @@ mounts: [
 
 ### 6.3 Repo 侧约定
 
-- init.sh 用 `wtc-install` 安装依赖。它会先发 `phase install`，再持共享锁执行 `pnpm install --frozen-lockfile --prefer-offline`。
+- init.sh 用 `wtc-install` 安装依赖。它会先发 `phase install`，再持共享锁执行 `pnpm install --frozen-lockfile --prefer-offline`；额外参数透传给 pnpm（`-C <dir>` 指定目录，无 lockfile 的 repo 加 `--no-frozen-lockfile`）。
 - pnpm 11 默认对被忽略的 build script 报错（`ERR_PNPM_IGNORED_BUILDS`）→ repo 须在 `pnpm-workspace.yaml` 声明 `allowBuilds`。
 - repo 若使用 `shamefullyHoist: true`，命令须经 `pnpm run` / `pnpm exec` / `pnpx` 执行（它们会改写 `NODE_PATH` 等配置），直接 `node xxx` 可能找不到模块。wtc 不干预，只在 setup 编写指南（§15）中说明。
 - GC 由 host 负责，容器内不执行 prune。
 
 ### 6.4 SSH / git
 
-- 私钥不进容器；`SSH_AUTH_SOCK=/wtc/ssh-agent.sock`。
+- 私钥不进容器；agent socket 存在时 `SSH_AUTH_SOCK=/wtc/ssh-agent.sock`。
 - `wtc-entry` 把 `/wtc/ssh/{config,known_hosts}` **复制**到 `~/.ssh`（可写，避免 ssh 写 known_hosts 失败）；clone 完全由 init.sh 负责。
-- **known_hosts 来源**：`wtc up` 时从宿主机 `~/.ssh/known_hosts` 按 `ssh.knownHosts` 用 `ssh-keygen -F` 提取。只沿用宿主机已信任的公钥，不在容器里首次信任；缺失时报错，提示先在宿主机上 ssh 一次。
+- **known_hosts 来源**：`wtc up` 时从宿主机 `~/.ssh/known_hosts` 按 `ssh.knownHosts` 用 `ssh-keygen -F` 提取。只沿用宿主机已信任的公钥，不在容器里首次信任；缺失时**警告并跳过**该主机（不报错；`up` 事件流输出 `warning:`），提示先在宿主机上 ssh 一次。
 - colima 须开启 `forwardAgent: true`，`doctor` 检查此项。
 
 ## 7. 启动流程与 status 协议

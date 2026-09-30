@@ -4,3 +4,7 @@ export * from "./version";
 export * from "./setup/schema";
 export * from "./setup/load";
 export * from "./setup/image-hash";
+export * from "./runtime/types";
+export * from "./runtime/fake";
+export * from "./runtime/docker-cli";
+export * from "./runtime/platform";

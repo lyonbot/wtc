@@ -1,1 +1,6 @@
 .superpowers/
+node_modules
+kit/dist
+dist
+**/.wtc/
+*.tsbuildinfo

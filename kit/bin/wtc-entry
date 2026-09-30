@@ -16,16 +16,44 @@ init_rel="${WTC_INIT:-init.sh}"
 init="$WTC_SETUP_MOUNT/$init_rel"
 timeout_s="${WTC_READY_TIMEOUT:-900}"
 
-mkdir -p "$WTC_RUN" "$WTC_LOG"
+mkdir -p "$WTC_RUN"
 bootId="$(date -u +%Y%m%dT%H%M%S)-$RANDOM"
 export WTC_BOOT_ID="$bootId"
 "$KIT" status init --file "$STATUS" --boot-id "$bootId"
 
+init_pid=""
+finished=0
+errline=""
+shutdown() {
+  trap - TERM INT EXIT
+  [ -n "$init_pid" ] && kill -TERM -- "-$init_pid" 2>/dev/null || true
+  kill $(jobs -p) 2>/dev/null || true
+  exit 0
+}
+# Safety net: any unexpected failure after status init must not leave "booting" forever.
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [ "$finished" = 0 ] && [ "$rc" != 0 ]; then
+    if grep -q '"state":"booting"' "$STATUS" 2>/dev/null; then
+      "$KIT" status finish --file "$STATUS" --state failed \
+        --message "wtc-entry error: exit code $rc near line ${errline:-?}" || true
+    fi
+    trap shutdown TERM INT
+    while true; do sleep 3600 & wait $!; done # stay resident for debugging
+  fi
+}
+trap 'errline=$LINENO' ERR
+trap on_exit EXIT
+trap shutdown TERM INT
+
+mkdir -p "$WTC_LOG"
+
 # ssh: copy config/known_hosts so ssh can write to them
 if [ -f "$WTC_SSH/config" ] || [ -f "$WTC_SSH/known_hosts" ]; then
-  mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+  mkdir -p "${HOME:-/root}/.ssh" && chmod 700 "${HOME:-/root}/.ssh"
   for f in config known_hosts; do
-    [ -f "$WTC_SSH/$f" ] && cp "$WTC_SSH/$f" "$HOME/.ssh/$f" && chmod 600 "$HOME/.ssh/$f"
+    [ -f "$WTC_SSH/$f" ] && cp "$WTC_SSH/$f" "${HOME:-/root}/.ssh/$f" && chmod 600 "${HOME:-/root}/.ssh/$f"
   done
 fi
 if [ -S "${WTC_SSH_AGENT_SOCK:-/wtc/ssh-agent.sock}" ]; then
@@ -47,18 +75,14 @@ fi
 socks_args=(--listen "0.0.0.0:${WTC_SOCKS_PORT:-1080}")
 [ -n "${WTC_SOCKS_USER:-}" ] && socks_args+=(--user "$WTC_SOCKS_USER" --pass "${WTC_SOCKS_PASS:-}")
 "$KIT" socks "${socks_args[@]}" &
-for p in ${WTC_HOST_FORWARDS//,/ }; do
+socks_pid=$!
+fwds="${WTC_HOST_FORWARDS:-}"
+for p in ${fwds//,/ }; do
   "$KIT" forward --listen "127.0.0.1:$p" --to "host.docker.internal:$p" &
 done
 
-init_pid=""
-shutdown() {
-  trap - TERM INT
-  [ -n "$init_pid" ] && kill -TERM -- "-$init_pid" 2>/dev/null || true
-  kill $(jobs -p) 2>/dev/null || true
-  exit 0
-}
-trap shutdown TERM INT
+sleep 0.5
+kill -0 "$socks_pid" 2>/dev/null || echo "[wtc] wtc-kit socks exited early (port ${WTC_SOCKS_PORT:-1080} busy?)" >&2
 
 if [ ! -x "$init" ] || [ -d "$init" ]; then
   "$KIT" status finish --file "$STATUS" --state failed --reason exit \
@@ -105,5 +129,6 @@ else
   init_pid=""
 fi
 
+finished=1
 # stay resident (also when failed, for debugging)
 while true; do sleep 3600 & wait $!; done

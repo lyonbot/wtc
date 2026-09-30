@@ -100,3 +100,17 @@ func TestStatusAtomic(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+func TestStatusFinishRejectsBadState(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "s.json")
+	statusInit(f, "b")
+	if err := statusFinish(f, "booting", nil, "", ""); err == nil {
+		t.Fatal("expected error")
+	}
+	if err := statusFinish(f, "", nil, "", ""); err == nil {
+		t.Fatal("expected error for empty state")
+	}
+	if readStatus(t, f)["state"] != "booting" {
+		t.Fatal("state changed")
+	}
+}

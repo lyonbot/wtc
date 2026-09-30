@@ -17,5 +17,5 @@ test("ensureKit extracts executables once", async () => {
   expect(names.map((n) => statSync(join(dir, n)).mtimeMs)).toEqual(before);
   const amd = await ensureKit({ arch: "amd64", cacheDir });
   expect(amd).not.toBe(dir);
-  expect(dir).toContain(`kit/`);
+  expect(dir).toMatch(/kit\/[^/]+-arm64-[0-9a-f]{8}$/);
 });

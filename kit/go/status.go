@@ -71,6 +71,9 @@ func statusPhase(f, name, msg string) error {
 }
 
 func statusFinish(f, state string, exitCode *int, reason, msg string) error {
+	if state != "ready" && state != "failed" {
+		return fmt.Errorf("invalid --state %q (want ready|failed)", state)
+	}
 	s, err := readStatusFile(f)
 	if err != nil {
 		return err

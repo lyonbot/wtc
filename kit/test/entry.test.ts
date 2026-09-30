@@ -37,7 +37,7 @@ interface Boot {
   waitDone: () => Promise<any>;
 }
 
-function boot(script: string | null, extra: Record<string, string> = {}): Boot {
+function boot(script: string | null, extra: Record<string, string | undefined> = {}): Boot {
   const d = mkdtempSync(join(root, "case-"));
   const setup = join(d, "setup");
   const run = join(d, "run");
@@ -47,8 +47,7 @@ function boot(script: string | null, extra: Record<string, string> = {}): Boot {
     writeFileSync(join(setup, "init.sh"), `#!/usr/bin/env bash\n${script}\n`);
     chmodSync(join(setup, "init.sh"), 0o755);
   }
-  const proc = Bun.spawn([join(bin, "wtc-entry")], {
-    env: {
+  const env: Record<string, string | undefined> = {
       ...process.env,
       HOME: d,
       WTC_BIN: bin,
@@ -62,7 +61,10 @@ function boot(script: string | null, extra: Record<string, string> = {}): Boot {
       WTC_HOST_FORWARDS: "",
       WTC_READY_TIMEOUT: "30",
       ...extra,
-    },
+  };
+  for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
+  const proc = Bun.spawn([join(bin, "wtc-entry")], {
+    env: env as Record<string, string>,
     stdout: "ignore",
     stderr: "ignore",
   });
@@ -153,5 +155,22 @@ describe("wtc-entry", () => {
     const sock = await Bun.connect({ hostname: "127.0.0.1", port, socket: { data() {} } });
     sock.end();
     expect(existsSync(join(b.run, "status.json"))).toBe(true);
+  });
+
+  test("works with WTC_HOST_FORWARDS absent from env", async () => {
+    const b = boot(`exit 0`, { WTC_HOST_FORWARDS: undefined });
+    expect((await b.waitDone()).state).toBe("ready");
+  });
+
+  test("unexpected entry failure -> failed, not stuck booting", async () => {
+    const notADir = join(root, "afile");
+    writeFileSync(notADir, "x");
+    const b = boot(`exit 0`, { WTC_LOG: join(notADir, "log") });
+    const s = await b.waitDone();
+    expect(s.state).toBe("failed");
+    expect(s.message).toContain("wtc-entry error");
+    expect(b.proc.exitCode).toBeNull(); // stays resident
+    b.proc.kill("SIGTERM");
+    expect(await b.proc.exited).toBe(0);
   });
 });

@@ -77,8 +77,10 @@ export function buildCreateSpec(o: {
   }
 
   assertBindable(mounts.filter((x) => x.type === "bind").map((x) => x.source), o.platform.bindableRoots);
-  // agent socket path lives inside the VM on colima; not subject to bindableRoots
-  if (o.platform.sshAgentSource) mounts.push({ type: "bind", source: o.platform.sshAgentSource, target: "/wtc/ssh-agent.sock" });
+  // agent socket path lives inside the VM on colima; not subject to bindableRoots. It may be missing
+  // (colima without forwardAgent) — createMissing keeps `create` from failing; entry only uses it if it is a socket.
+  if (o.platform.sshAgentSource)
+    mounts.push({ type: "bind", source: o.platform.sshAgentSource, target: "/wtc/ssh-agent.sock", createMissing: true });
 
   return {
     name: containerName(id, o.name),

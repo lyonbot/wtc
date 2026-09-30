@@ -44,6 +44,10 @@ describe("build", () => {
     t.rt.images = [];
     t.rt.build = async () => { throw new Error("boom"); };
     expect((await err(build(t.ctx, {})))?.message ?? "").toContain("boom");
+    // forced rebuild failure is never swallowed, even though the tag exists
+    t.rt.images = [{ ref: `wtc-demo:${hash}`, id: "sha256:old" }];
+    t.rt.build = async () => { throw new Error("forced boom"); };
+    expect((await err(build(t.ctx, { force: true })))?.message ?? "").toContain("forced boom");
   });
 });
 

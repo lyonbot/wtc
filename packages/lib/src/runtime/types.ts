@@ -8,7 +8,14 @@ export interface ContainerInfo {
   /** ISO timestamp, "" if never started */
   startedAt: string;
 }
-export type RuntimeMount = { type: "volume" | "bind"; source: string; target: string; readonly?: boolean };
+export type RuntimeMount = {
+  type: "volume" | "bind";
+  source: string;
+  target: string;
+  readonly?: boolean;
+  /** bind only: source may be missing on the runtime host; emitted as `-v` (docker creates it) instead of `--mount` (which fails) */
+  createMissing?: boolean;
+};
 export interface CreateSpec {
   name: string;
   image: string;

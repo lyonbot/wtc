@@ -47,7 +47,10 @@ const bunSpawn: SpawnFn = async (argv, opts) => {
   return { exitCode, stdout, stderr };
 };
 
-const mountArg = (m: RuntimeMount) => `type=${m.type},src=${m.source},dst=${m.target}${m.readonly ? ",readonly" : ""}`;
+const mountArgs = (m: RuntimeMount): string[] =>
+  m.type === "bind" && m.createMissing
+    ? ["-v", `${m.source}:${m.target}${m.readonly ? ":ro" : ""}`]
+    : ["--mount", `type=${m.type},src=${m.source},dst=${m.target}${m.readonly ? ",readonly" : ""}`];
 const NEVER_STARTED = /^0001-01-01/;
 
 function toInfo(j: any): ContainerInfo {
@@ -117,7 +120,7 @@ export class DockerCliRuntime implements Runtime {
     const a = ["create", "--init", "--restart", "unless-stopped", "--name", s.name];
     for (const [k, v] of Object.entries(s.labels)) a.push("-l", `${k}=${v}`);
     for (const [k, v] of Object.entries(s.env)) a.push("-e", `${k}=${v}`);
-    for (const m of s.mounts) a.push("--mount", mountArg(m));
+    for (const m of s.mounts) a.push(...mountArgs(m));
     for (const p of s.ports) a.push("-p", `${p.hostIp}:${p.hostPort}:${p.containerPort}`);
     for (const h of s.extraHosts) a.push("--add-host", h);
     if (s.workdir) a.push("-w", s.workdir);
@@ -212,7 +215,7 @@ export class DockerCliRuntime implements Runtime {
   async runOnce(o: { image: string; cmd: string[]; mounts: RuntimeMount[]; env?: Record<string, string> }) {
     const a = ["run", "--rm"];
     for (const [k, v] of Object.entries(o.env ?? {})) a.push("-e", `${k}=${v}`);
-    for (const m of o.mounts) a.push("--mount", mountArg(m));
+    for (const m of o.mounts) a.push(...mountArgs(m));
     a.push(o.image, ...o.cmd);
     return await this.spawn([this.bin, ...a], { env: this.env as Record<string, string> });
   }

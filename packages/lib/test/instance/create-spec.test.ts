@@ -56,7 +56,7 @@ describe("buildCreateSpec", () => {
     expect(byTarget["/wtc/bin"]).toEqual({ type: "bind", source: ctx.kitDir, target: "/wtc/bin", readonly: true });
     expect(byTarget["/wtc/setup"]).toEqual({ type: "bind", source: dir, target: "/wtc/setup", readonly: true });
     expect(byTarget["/wtc/ssh"]).toEqual({ type: "bind", source: join(run, "ssh"), target: "/wtc/ssh", readonly: true });
-    expect(byTarget["/wtc/ssh-agent.sock"]).toEqual({ type: "bind", source: "/tmp/agent.sock", target: "/wtc/ssh-agent.sock" });
+    expect(byTarget["/wtc/ssh-agent.sock"]).toEqual({ type: "bind", source: "/tmp/agent.sock", target: "/wtc/ssh-agent.sock", createMissing: true });
     expect(byTarget["/wtc/run"]).toEqual({ type: "bind", source: run, target: "/wtc/run" });
     expect(byTarget["/wtc/log"]).toEqual({ type: "bind", source: join(dir, ".wtc", "log", "feat-a"), target: "/wtc/log" });
     expect(byTarget["/root/.m2"]).toEqual({ type: "volume", source: "wtc-demo.v.m2", target: "/root/.m2" });

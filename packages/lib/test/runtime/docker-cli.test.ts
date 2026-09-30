@@ -22,6 +22,7 @@ test("create argv", async () => {
     mounts: [
       { type: "volume", source: "vol", target: "/pnpm" },
       { type: "bind", source: "/home/x/kit", target: "/wtc/bin", readonly: true },
+      { type: "bind", source: "/run/host-services/ssh-auth.sock", target: "/wtc/ssh-agent.sock", createMissing: true },
     ],
     ports: [{ hostIp: "0.0.0.0", hostPort: 21080, containerPort: 1080 }],
     entrypoint: ["/wtc/bin/wtc-entry", "--x"], extraHosts: ["host.docker.internal:host-gateway"], workdir: "/workspace",
@@ -34,6 +35,9 @@ test("create argv", async () => {
   expect(has(a, "-p", "0.0.0.0:21080:1080")).toBe(true);
   expect(has(a, "--mount", "type=volume,src=vol,dst=/pnpm")).toBe(true);
   expect(has(a, "--mount", "type=bind,src=/home/x/kit,dst=/wtc/bin,readonly")).toBe(true);
+  // missing-tolerant bind (ssh agent socket) uses -v, which docker auto-creates
+  expect(has(a, "-v", "/run/host-services/ssh-auth.sock:/wtc/ssh-agent.sock")).toBe(true);
+  expect(a.some((x) => x.includes("dst=/wtc/ssh-agent.sock"))).toBe(false);
   expect(has(a, "--entrypoint", "/wtc/bin/wtc-entry")).toBe(true);
   expect(has(a, "--add-host", "host.docker.internal:host-gateway")).toBe(true);
   expect(has(a, "-l", "wtc.setup=s")).toBe(true);

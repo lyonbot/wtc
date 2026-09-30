@@ -27,7 +27,7 @@ export async function build(
   } catch (e) {
     // concurrent builds of the same content-hashed tag (e.g. parallel `up`): the loser fails with
     // "image ... already exists" — the tag it wanted is there, so that is success
-    if (await hasImage(ctx, ref)) return { ref, skipped: true };
+    if (!o.force && (await hasImage(ctx, ref))) return { ref, skipped: true };
     throw e;
   }
   return { ref, skipped: false };

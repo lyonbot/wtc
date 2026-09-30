@@ -58,6 +58,7 @@ export async function gc(ctx: InstanceContext, o: { dryRun?: boolean; pruneStore
       image: current,
       cmd: ["bash", "-lc", "flock -x /pnpm/.wtc-lock pnpm store prune"],
       mounts: [{ type: "volume", source: pnpmVolume(id), target: "/pnpm" }],
+      // same vars as kit/bin/wtc-entry (which picks one GVS var by pnpm version); setting both is harmless
       env: {
         PNPM_CONFIG_STORE_DIR: "/pnpm/store",
         PNPM_CONFIG_CACHE_DIR: "/pnpm/cache",

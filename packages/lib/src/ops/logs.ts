@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { open, readdir, stat } from "node:fs/promises";
 import { WtcError } from "../errors";
 import { instancePaths } from "../instance/create-spec";
@@ -20,6 +21,7 @@ export async function* logs(
 
   let offset = 0;
   let partial = "";
+  const dec = new StringDecoder("utf8");
   for (;;) {
     const size = (await stat(path).catch(() => null))?.size ?? 0;
     if (size > offset) {
@@ -28,7 +30,7 @@ export async function* logs(
         const buf = Buffer.alloc(size - offset);
         await fh.read(buf, 0, buf.length, offset);
         offset = size;
-        partial += buf.toString("utf8");
+        partial += dec.write(buf);
       } finally {
         await fh.close();
       }
@@ -43,5 +45,6 @@ export async function* logs(
       o.signal?.addEventListener("abort", done, { once: true });
     });
   }
+  partial += dec.end();
   if (partial) yield partial;
 }

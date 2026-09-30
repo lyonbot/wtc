@@ -10,7 +10,7 @@ export async function tunnel(ctx: InstanceContext, name: string) {
   if (!s.socks) throw new WtcError("NOT_FOUND", `no socks port recorded for ${name}`, `wtc rm ${name} && wtc up ${name}`);
   const auth = !!ctx.setup.manifest.socksAuth;
   const hints = ["use socks5h:// so DNS resolves inside the container"];
-  const noProxy = process.env.NO_PROXY ?? process.env.no_proxy ?? "";
+  const noProxy = `${process.env.NO_PROXY ?? ""},${process.env.no_proxy ?? ""}`;
   if (/localhost|127\.0\.0\.1/.test(noProxy))
     hints.push("NO_PROXY contains localhost/127.0.0.1 — clients will bypass the proxy for localhost; unset it for this client");
   if (s.socks.bind === "0.0.0.0" && !auth)

@@ -11,19 +11,19 @@ One docker container per worktree/instance, defined by a `wtc.setup.ts` in the p
 
 - Project contains `wtc.setup.ts` (or user mentions wtc / per-worktree containers).
 - You need an isolated env per branch, or to reach a dev server inside a container.
-- Do not use for one-off `docker run`; do not edit `wtc.setup.ts` unless asked.
+- Do not use for one-off `docker run`; do not edit `wtc.setup.ts` unless asked. It may `import { defineSetup } from "wtc"` or just `export default { ... }`.
 
 ## Quick reference
 
 Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for `wtc.setup.ts`). Query commands accept `--json`.
 
 - `wtc build` - build image; skipped if unchanged.
-- `wtc up <name> [--set K=V]... [--socks-bind <addr>] [--socks-host-port <p>] [--no-wait]` - absent: create; stopped: start; booting: wait; ready: return. Exit 1 if final state is failed. `--set`/socks flags are creation-time only.
+- `wtc up <name> [--set K=V]... [--socks-bind <addr>] [--socks-host-port <p>] [--no-wait]` - absent: create; stopped: start; booting: wait; ready: return. Exit 1 if final state is failed. Re-run `wtc up <name>` at any time to resume waiting (e.g. after Ctrl-C or `--no-wait`). `--set`/socks flags are creation-time only.
 - `wtc start <name>` / `wtc stop <name>` - stop keeps the overlay filesystem.
 - `wtc restart <name>` - re-run init.sh (use after a failed boot).
 - `wtc rm <name> [--force]` - runs `preRemove`, then deletes container, instance volumes, state.
 - `wtc ls [--json]` - NAME STATE PHASE SOCKS IMAGE.
-- `wtc status <name> [--watch] [--json]` - state, phase, health, socks, stale-image.
+- `wtc status <name> [--watch] [--json]` - state, phase, health, socks, `staleImage`.
 - `wtc logs <name> [-f] [--boot <id>]` - init logs.
 - `wtc run <name> <script> [-- args]` - manifest script in the container; exits with its exit code.
 - `wtc check <name> [--json]` - run health checks now.
@@ -94,4 +94,4 @@ An instance in `failed` state keeps its container: debug (see flow above), then 
 
 - `wtc rm` runs the manifest `preRemove` (e.g. unpushed-work check) and refuses on non-zero. `--force` skips it and deletes instance volumes: unpushed work is lost. Never use `--force` without the user's consent.
 - SOCKS has no auth unless the manifest sets `socksAuth`. With the default bind `0.0.0.0`, anyone on the LAN can use it to reach the container's `127.0.0.1`, the host (`host.docker.internal`) and any network the container reaches. Prefer `--socks-bind 127.0.0.1` on untrusted networks; the bind is fixed at creation (`rm` + `up` to change).
-- Image changes show as `stale-image`; wtc never rebuilds instances automatically.
+- Image changes show as `staleImage: true` (`IMAGE` column `stale`); wtc never rebuilds instances automatically.

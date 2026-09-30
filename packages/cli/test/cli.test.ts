@@ -10,6 +10,15 @@ async function wtc(args: string[], env: Record<string, string> = {}) {
 }
 
 describe("cli", () => {
+  test("usage error inside action: exit 2 with stderr message", async () => {
+    const r = await wtc(["up", "x", "--set", "foo"], { WTC_SETUP: fixture });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("error: --set expects K=V");
+    const o = await wtc(["open", "x", "vim"], { WTC_SETUP: fixture });
+    expect(o.code).toBe(2);
+    expect(o.err).toContain("error:");
+  });
+
   test("--help lists all commands", async () => {
     const r = await wtc(["--help"]);
     for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "tunnel", "open", "gc", "skill", "doctor"])

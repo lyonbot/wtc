@@ -1,16 +1,33 @@
 #!/usr/bin/env bun
 import { Command, CommanderError } from "commander";
+import * as lib from "@wtc/lib";
 import { createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "@wtc/lib";
 import skillMd from "../skill/SKILL.md" with { type: "text" };
 import { renderLs, renderSummary, table, upRenderer } from "./render";
 
+/** Virtual modules so a user's wtc.setup.ts can `import { defineSetup } from "wtc"` (also in the compiled binary). */
+Bun.plugin({
+  name: "wtc-virtual",
+  setup(b) {
+    for (const id of ["wtc", "@wtc/lib"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" }));
+  },
+});
+
+/** Bad CLI input detected inside an action; exits 2. */
+class UsageError extends Error {}
+
+type Loader = (setupFlag: string | undefined) => Promise<Wtc>;
+const defaultLoader: Loader = (flag) =>
+  createWtc({
+    setupDir: resolveSetupDir({ flag, env: process.env.WTC_SETUP, cwd: process.cwd() }),
+    ...(process.env.WTC_FAKE_RUNTIME === "1" ? { runtime: new FakeRuntime() } : {}),
+  });
+let loader: Loader = defaultLoader;
+let exitCode = 0;
+
 const json = (v: unknown) => console.log(JSON.stringify(v, null, 2));
 
-async function load(cmd: Command): Promise<Wtc> {
-  const opts = cmd.optsWithGlobals<{ setup?: string }>();
-  const setupDir = resolveSetupDir({ flag: opts.setup, env: process.env.WTC_SETUP, cwd: process.cwd() });
-  return createWtc({ setupDir, ...(process.env.WTC_FAKE_RUNTIME === "1" ? { runtime: new FakeRuntime() } : {}) });
-}
+const load = (cmd: Command) => loader(cmd.optsWithGlobals<{ setup?: string }>().setup);
 
 /** Wrap an action: load the setup, run, map WtcError to exit 1. */
 const act = <A extends unknown[]>(fn: (w: Wtc, cmd: Command, ...a: A) => Promise<void | number>) =>
@@ -18,7 +35,7 @@ const act = <A extends unknown[]>(fn: (w: Wtc, cmd: Command, ...a: A) => Promise
     const cmd = args[args.length - 1] as Command;
     const rest = args.slice(0, -1) as unknown as A;
     const code = await fn(await load(cmd), cmd, ...rest);
-    if (typeof code === "number") process.exitCode = code;
+    if (typeof code === "number") exitCode = code;
   };
 
 const collect = (v: string, prev: string[]) => [...prev, v];
@@ -49,7 +66,7 @@ export function buildProgram(): Command {
       const set: Record<string, string> = {};
       for (const kv of o.set as string[]) {
         const i = kv.indexOf("=");
-        if (i < 1) throw new CommanderError(2, "wtc.usage", `--set expects K=V, got "${kv}"`);
+        if (i < 1) throw new UsageError(`--set expects K=V, got "${kv}"`);
         set[kv.slice(0, i)] = kv.slice(i + 1);
       }
       const render = upRenderer(name);
@@ -67,7 +84,7 @@ export function buildProgram(): Command {
     }));
 
   for (const [c, d] of [["start", "start a stopped instance"], ["stop", "stop (keeps overlay)"], ["restart", "re-run init.sh"]] as const)
-    p.command(`${c} <name>`).description(d).action(act(async (w, _c, name: string) => { await w[c](name); }));
+    p.command(`${c} <name>`).description(d).action(act(async (w, _c, name: string) => { await w[c](name); console.log(`${c === "stop" ? "stopped" : c === "start" ? "started" : "restarting"} ${name}`); }));
 
   p.command("rm <name>").description("run preRemove, delete container, volumes and state").option("--force", "skip preRemove / any state")
     .action(act(async (w, cmd, name: string) => { await w.rm(name, { force: !!cmd.opts().force }); console.log(`removed ${name}`); }));
@@ -127,7 +144,7 @@ export function buildProgram(): Command {
 
   p.command("open <name> [editor]").description("open in VS Code / Cursor (editor: code | cursor)").option("--json", jopt)
     .action(act(async (w, cmd, name: string, editor?: string) => {
-      if (editor && editor !== "code" && editor !== "cursor") throw new CommanderError(2, "wtc.usage", `editor must be code or cursor`);
+      if (editor && editor !== "code" && editor !== "cursor") throw new UsageError("editor must be code or cursor");
       const r = await w.open(name, editor as "code" | "cursor" | undefined);
       if (cmd.opts().json) json(r); else console.log(r.launched ? `opened ${r.uri}` : `editor not in PATH; URI: ${r.uri}`);
     }));
@@ -160,15 +177,19 @@ export function buildProgram(): Command {
   return p;
 }
 
-if (import.meta.main) {
+/** Run the CLI; returns the exit code. `load` is injectable for tests. */
+export async function runCli(argv: string[], load?: Loader): Promise<number> {
+  loader = load ?? defaultLoader;
+  exitCode = 0;
   try {
-    await buildProgram().parseAsync(process.argv);
+    await buildProgram().parseAsync(argv);
+    return exitCode;
   } catch (e) {
-    if (e instanceof CommanderError) process.exit(e.exitCode === 0 ? 0 : 2);
-    if (e instanceof WtcError) {
-      console.error(`error: ${e.message}`);
-      if (e.hint) console.error(`hint: ${e.hint}`);
-    } else console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
-    process.exit(1);
+    if (e instanceof CommanderError) return e.exitCode === 0 ? 0 : 2;
+    console.error(`error: ${e instanceof Error ? e.message : String(e)}`);
+    if (e instanceof WtcError && e.hint) console.error(`hint: ${e.hint}`);
+    return e instanceof UsageError ? 2 : 1;
   }
 }
+
+if (import.meta.main) process.exit(await runCli(process.argv));

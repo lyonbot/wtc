@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Usage: wtc-signal phase <name> [msg]
+set -euo pipefail
+WTC_BIN="${WTC_BIN:-/wtc/bin}"
+WTC_RUN="${WTC_RUN:-/wtc/run}"
+[ "${1:-}" = phase ] && [ -n "${2:-}" ] || { echo "usage: wtc-signal phase <name> [msg]" >&2; exit 2; }
+exec "$WTC_BIN/wtc-kit" status phase --file "$WTC_RUN/status.json" --name "$2" --message "${3:-}"

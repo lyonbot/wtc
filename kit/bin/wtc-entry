@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Container entrypoint: status protocol, ssh/pnpm env, socks + forwards, run init, stay resident.
+set -euo pipefail
+
+export WTC_BIN="${WTC_BIN:-/wtc/bin}"
+export WTC_RUN="${WTC_RUN:-/wtc/run}"
+export WTC_LOG="${WTC_LOG:-/wtc/log}"
+export WTC_SETUP_MOUNT="${WTC_SETUP_MOUNT:-/wtc/setup}"
+export WTC_SSH="${WTC_SSH:-/wtc/ssh}"
+export WTC_CWD="${WTC_CWD:-/workspace}"
+export PATH="$WTC_BIN:$PATH"
+
+KIT="$WTC_BIN/wtc-kit"
+STATUS="$WTC_RUN/status.json"
+init_rel="${WTC_INIT:-init.sh}"
+init="$WTC_SETUP_MOUNT/$init_rel"
+timeout_s="${WTC_READY_TIMEOUT:-900}"
+
+mkdir -p "$WTC_RUN" "$WTC_LOG"
+bootId="$(date -u +%Y%m%dT%H%M%S)-$RANDOM"
+export WTC_BOOT_ID="$bootId"
+"$KIT" status init --file "$STATUS" --boot-id "$bootId"
+
+# ssh: copy config/known_hosts so ssh can write to them
+if [ -f "$WTC_SSH/config" ] || [ -f "$WTC_SSH/known_hosts" ]; then
+  mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+  for f in config known_hosts; do
+    [ -f "$WTC_SSH/$f" ] && cp "$WTC_SSH/$f" "$HOME/.ssh/$f" && chmod 600 "$HOME/.ssh/$f"
+  done
+fi
+if [ -S "${WTC_SSH_AGENT_SOCK:-/wtc/ssh-agent.sock}" ]; then
+  export SSH_AUTH_SOCK="${WTC_SSH_AGENT_SOCK:-/wtc/ssh-agent.sock}"
+fi
+
+# pnpm global store env (skipped when pnpm is missing)
+if pv="$(pnpm --version 2>/dev/null)" && [ -n "$pv" ]; then
+  export PNPM_CONFIG_STORE_DIR=/pnpm/store PNPM_CONFIG_CACHE_DIR=/pnpm/cache
+  major="${pv%%.*}"; rest="${pv#*.}"; minor="${rest%%.*}"
+  if [ "$major" -gt 11 ] || { [ "$major" -eq 11 ] && [ "$minor" -ge 23 ]; }; then
+    export PNPM_CONFIG_VIRTUAL_STORE_TYPE=global
+  else
+    export PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE=true
+  fi
+fi
+
+# long-lived helpers
+socks_args=(--listen "0.0.0.0:${WTC_SOCKS_PORT:-1080}")
+[ -n "${WTC_SOCKS_USER:-}" ] && socks_args+=(--user "$WTC_SOCKS_USER" --pass "${WTC_SOCKS_PASS:-}")
+"$KIT" socks "${socks_args[@]}" &
+for p in ${WTC_HOST_FORWARDS//,/ }; do
+  "$KIT" forward --listen "127.0.0.1:$p" --to "host.docker.internal:$p" &
+done
+
+init_pid=""
+shutdown() {
+  trap - TERM INT
+  [ -n "$init_pid" ] && kill -TERM -- "-$init_pid" 2>/dev/null || true
+  kill $(jobs -p) 2>/dev/null || true
+  exit 0
+}
+trap shutdown TERM INT
+
+if [ ! -x "$init" ] || [ -d "$init" ]; then
+  "$KIT" status finish --file "$STATUS" --state failed --reason exit \
+    --message "init script not found or not executable: $init"
+else
+  log="$WTC_LOG/init.$bootId.log"
+  # own process group: setsid where available, else job control (macOS)
+  if command -v setsid >/dev/null 2>&1; then
+    setsid bash -c 'set -o pipefail; "$0" 2>&1 | tee -a "$1"' "$init" "$log" &
+  else
+    set -m
+    bash -c 'set -o pipefail; "$0" 2>&1 | tee -a "$1"' "$init" "$log" &
+    set +m
+  fi
+  init_pid=$!
+
+  flag="$WTC_RUN/.timeout.$bootId"
+  (
+    trap 'kill "$s" 2>/dev/null; exit 0' TERM
+    sleep "$timeout_s" & s=$!
+    wait "$s"
+    : > "$flag"
+    kill -TERM -- "-$init_pid" 2>/dev/null || exit 0
+    for _ in 1 2 3 4 5; do kill -0 -- "-$init_pid" 2>/dev/null || exit 0; sleep 1; done
+    kill -KILL -- "-$init_pid" 2>/dev/null || true
+  ) &
+  wd=$!
+
+  rc=0
+  wait "$init_pid" || rc=$?
+  if [ -f "$flag" ]; then
+    wait "$wd" || true
+    rm -f "$flag"
+    "$KIT" status finish --file "$STATUS" --state failed --reason timeout \
+      --message "init did not exit within ${timeout_s}s"
+  else
+    kill "$wd" 2>/dev/null || true
+    if [ "$rc" -eq 0 ]; then
+      "$KIT" status finish --file "$STATUS" --state ready
+    else
+      "$KIT" status finish --file "$STATUS" --state failed --exit-code "$rc" --reason exit
+    fi
+  fi
+  init_pid=""
+fi
+
+# stay resident (also when failed, for debugging)
+while true; do sleep 3600 & wait $!; done

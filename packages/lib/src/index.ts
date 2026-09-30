@@ -8,3 +8,4 @@ export * from "./runtime/types";
 export * from "./runtime/fake";
 export * from "./runtime/docker-cli";
 export * from "./runtime/platform";
+export * from "./kit/embed";

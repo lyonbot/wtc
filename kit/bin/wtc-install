@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Usage: wtc-install [pnpm install args...]  (shared-store safe: takes a shared lock)
+set -euo pipefail
+WTC_BIN="${WTC_BIN:-/wtc/bin}"
+"$WTC_BIN/wtc-signal" phase install
+
+has_c=0
+for a in "$@"; do [ "$a" = "-C" ] && has_c=1; done
+[ "$has_c" = 1 ] || cd "${WTC_CWD:-/workspace}"
+
+lock=()
+command -v flock >/dev/null 2>&1 && lock=(flock -s /pnpm/.wtc-lock)
+exec ${lock[@]+"${lock[@]}"} pnpm install --frozen-lockfile --prefer-offline "$@"

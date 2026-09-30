@@ -1,9 +1,13 @@
 {
   "name": "wtc-monorepo",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "bun test",
+    "build:kit": "bash kit/build.sh",
+    "test": "bun run build:kit && bun test",
+    "build": "bun run build:kit",
     "typecheck": "tsc -b packages/lib packages/cli"
   },
   "devDependencies": {

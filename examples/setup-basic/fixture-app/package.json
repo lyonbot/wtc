@@ -1,0 +1,8 @@
+{
+  "name": "fixture-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "is-number": "7.0.0"
+  }
+}

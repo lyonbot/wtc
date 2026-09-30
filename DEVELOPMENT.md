@@ -2,6 +2,7 @@
 
 - **Install:** `bun install`
 - **Test:** `bun test` (integration tests only with `WTC_INTEGRATION=1`)
+- **Integration tests (real docker):** `WTC_INTEGRATION=1 bun test examples/setup-basic` runs [examples/setup-basic/test/integration.test.ts](examples/setup-basic/test/integration.test.ts) against the example setup [examples/setup-basic](examples/setup-basic) (copied under `~/.cache/wtc-it/` because colima only shares `$HOME`; id `wtcit`, socks ports 22080-22179, host port 16379 must be free). `afterAll` removes every `wtc.setup=wtcit` container/volume and the `wtc-wtcit` image (`WTC_IT_KEEP_IMAGE=1` keeps the image).
 - **Typecheck:** `bun run typecheck`
 - **Layout:** `packages/lib` (core logic, [src/index.ts](packages/lib/src/index.ts)), `packages/cli` (thin CLI, [src/main.ts](packages/cli/src/main.ts))
 - **Design:** [docs/superpowers/specs/2026-09-30-wtc-design.md](docs/superpowers/specs/2026-09-30-wtc-design.md)

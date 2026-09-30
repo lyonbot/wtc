@@ -306,7 +306,7 @@ export async function rm(ctx: InstanceContext, name: string, o: { force?: boolea
       if (r.exitCode !== 0)
         throw new WtcError(
           "PREREMOVE_REJECTED",
-          `preRemove rejected removing ${name} (exit ${r.exitCode}):\n${(r.stdout + r.stderr).trim()}`,
+          `preRemove rejected removing ${name} (exit ${r.exitCode})${(r.stdout + r.stderr).trim() ? `:\n${(r.stdout + r.stderr).trim()}` : ""}`,
           "resolve the issue, or use --force",
         );
     }

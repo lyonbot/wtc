@@ -57,7 +57,11 @@ func statusInit(f, bootID string) error {
 
 // statusPhase is a no-op unless the state is still "booting".
 func statusPhase(f, name, msg string) error {
-	fmt.Printf("[wtc] phase %s %s\n", name, msg)
+	if msg != "" {
+		fmt.Printf("[wtc] phase %s %s\n", name, msg)
+	} else {
+		fmt.Printf("[wtc] phase %s\n", name)
+	}
 	s, err := readStatusFile(f)
 	if err != nil {
 		return err

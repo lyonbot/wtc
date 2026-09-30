@@ -303,6 +303,13 @@ describe("rm", () => {
     expect(existsSync(runDir(t, "a"))).toBe(true);
   });
 
+  test("preRemove non-zero without output -> message has no dangling colon", async () => {
+    const t = await readyWithVolumes({ preRemove: "check" });
+    t.rt.execHandler = () => ({ exitCode: 1, stdout: "", stderr: "" });
+    const e = await err(rm(t.ctx, "a", {}));
+    expect(e?.message).toBe("preRemove rejected removing a (exit 1)");
+  });
+
   test("stopped without --force -> RM_NEEDS_RUNNING", async () => {
     const t = await readyWithVolumes({ preRemove: "true" });
     await t.rt.stop(C("a"));

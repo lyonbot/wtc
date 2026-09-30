@@ -38,7 +38,9 @@ export async function loadSetup(dir: string): Promise<LoadedSetup> {
   }
   const manifest = parsed.data as Manifest;
   for (const m of manifest.mounts) {
-    if (m.type === "bind" && !existsSync(m.source))
+    if (m.type !== "bind") continue;
+    m.source = resolve(abs, m.source); // relative bind sources are relative to the setup dir
+    if (!existsSync(m.source))
       throw new WtcError("INVALID_MANIFEST", `${file}: bind source does not exist: ${m.source}`);
   }
   return { dir: abs, manifest };

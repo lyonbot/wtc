@@ -11,3 +11,8 @@ export * from "./runtime/platform";
 export * from "./kit/embed";
 export * from "./status/status";
 export * from "./health/health";
+export * from "./instance/params";
+export * from "./instance/ports";
+export * from "./instance/ssh";
+export * from "./instance/create-spec";
+export * from "./instance/instance";

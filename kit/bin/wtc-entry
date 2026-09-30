@@ -71,6 +71,18 @@ if pv="$(pnpm --version 2>/dev/null)" && [ -n "$pv" ]; then
   fi
 fi
 
+# `docker exec` sessions (run / shell / agent use `bash -l`) do not inherit this process's exports
+profile="${WTC_PROFILE:-/etc/profile.d/wtc.sh}"
+write_profile() {
+  printf '# written by wtc-entry\nexport PATH=%q:"$PATH"\n' "$WTC_BIN"
+  for v in SSH_AUTH_SOCK PNPM_CONFIG_STORE_DIR PNPM_CONFIG_CACHE_DIR PNPM_CONFIG_VIRTUAL_STORE_TYPE PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE; do
+    if [ -n "${!v:-}" ]; then printf 'export %s=%q\n' "$v" "${!v}"; fi
+  done
+}
+if ! { mkdir -p "$(dirname "$profile")" && write_profile > "$profile.tmp" && mv "$profile.tmp" "$profile"; } 2>/dev/null; then
+  echo "wtc-entry: cannot write $profile; exec sessions will miss ssh/pnpm env" >&2
+fi
+
 # long-lived helpers
 socks_args=(--listen "0.0.0.0:${WTC_SOCKS_PORT:-1080}")
 [ -n "${WTC_SOCKS_USER:-}" ] && socks_args+=(--user "$WTC_SOCKS_USER" --pass "${WTC_SOCKS_PASS:-}")

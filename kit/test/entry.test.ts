@@ -30,6 +30,7 @@ function freePort(): number {
 }
 
 interface Boot {
+  dir: string;
   run: string;
   log: string;
   proc: Bun.Subprocess;
@@ -60,6 +61,7 @@ function boot(script: string | null, extra: Record<string, string | undefined> =
       WTC_SOCKS_PORT: String(freePort()),
       WTC_HOST_FORWARDS: "",
       WTC_READY_TIMEOUT: "30",
+      WTC_PROFILE: join(d, "profile.d", "wtc.sh"),
       ...extra,
   };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
@@ -84,7 +86,7 @@ function boot(script: string | null, extra: Record<string, string | undefined> =
     }
     throw new Error("timeout waiting for status: " + JSON.stringify(status()));
   };
-  return { run, log, proc, status, waitDone };
+  return { run, log, proc, status, waitDone, dir: d };
 }
 
 describe("wtc-entry", () => {
@@ -99,6 +101,21 @@ describe("wtc-entry", () => {
     expect(logs[0]).toContain(`init.${s.bootId}`);
     expect(readFileSync(join(b.log, logs[0]!), "utf8")).toContain("hello-from-init");
     expect(b.proc.exitCode).toBeNull(); // stays resident
+  });
+
+  test("writes exec-session env to the profile; login shells pick it up", async () => {
+    const b = boot(`true`, { SSH_AUTH_SOCK: undefined });
+    await b.waitDone();
+    const prof = join(b.dir, "profile.d", "wtc.sh");
+    const txt = readFileSync(prof, "utf8");
+    expect(txt).toContain(`export PATH=${bin}:"$PATH"`);
+    const r = Bun.spawnSync(["bash", "-c", `. "${prof}"; echo "$PATH"`], { env: { PATH: "/usr/bin:/bin" } });
+    expect(r.stdout.toString().trim().split(":")[0]).toBe(bin);
+  });
+
+  test("unwritable profile only warns", async () => {
+    const b = boot(`true`, { WTC_PROFILE: "/proc/nope/wtc.sh" });
+    expect((await b.waitDone()).state).toBe("ready");
   });
 
   test("init exit 3 -> failed with exitCode and last phase", async () => {

@@ -44,6 +44,19 @@ flowchart LR
 - **`shamefullyHoist: true` repos**: run commands via `pnpm run`, `pnpm exec` or `pnpx`. These rewrite `NODE_PATH` and related settings; plain `node x.js` may fail to resolve modules. Applies to `init.sh`, `scripts`, `checks` and tmux commands.
 - **Files needed inside a cloned repo** (configs, env files): mount them to a side path and **copy** them in. Do not symlink; Node resolves `require` from the symlink's real path outside the repo.
 
+## Optional: faster clones from a host checkout (reference only)
+
+Not used by the example. An `init.sh` clone can borrow objects from an existing host clone instead of downloading them.
+
+- **How**: `bind` the host repo read-only (e.g. `~/src/app` → `/mnt/src/app`), then `git -c safe.directory='*' clone --reference /mnt/src/app <url> <dir>`. Git fetches only objects the host lacks; `--reference` records them in `.git/objects/info/alternates`.
+- **Measured**: repos with 50–65 MB packs on a fast intranet remote. Clone time dropped by about half (e.g. 8.7 s → 3.7 s for two repos). It stayed about as fast with a host clone two months behind. The rest of the time is mostly worktree checkout.
+- **Not worth it**: `--dissociate`, which copies the borrowed objects and was slower than a plain network clone. A plain local clone of the mount (`git clone /mnt/src/app`) was a smaller gain and gives a bigger `.git`.
+- **Caveats**:
+  - The container repo depends on the mount for its whole life. Keep it a permanent setup `bind`, at the same path.
+  - `git gc --prune` on the host can delete objects the container still uses (`fatal: bad object`); the fix is re-cloning. A read-only mount protects the host, not the container.
+  - `safe.directory` is needed: the host repo is owned by a different uid than the container user.
+  - On colima the host repo must be under `$HOME` (see below).
+
 ## Host / platform notes
 
 - **colima shares only `$HOME`**: the setup dir and every `bind` source must live under it (else `BIND_NOT_SHARED`); `/tmp` and `/private/tmp` mount as empty dirs.

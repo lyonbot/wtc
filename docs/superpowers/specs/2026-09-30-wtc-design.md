@@ -54,8 +54,8 @@ flowchart LR
   RT --> C1 & C2
   subgraph C1["container wtc-basic--feat-a"]
     ENTRY["wtc-entry"] --> INIT["init.sh"]
-    SOCKS["microsock 0.0.0.0:1080"] --> APP["app 127.0.0.1:5173"]
-    SOCAT["socat 127.0.0.1:3306/6379"]
+    SOCKS["wtc-kit socks 0.0.0.0:1080"] --> APP["app 127.0.0.1:5173"]
+    SOCAT["wtc-kit forward 127.0.0.1:3306/6379"]
   end
   C2["container wtc-basic--feat-b"]
   BROWSER -- "socks5h://&lt;host-ip&gt;:&lt;socksHostPort&gt;" --> SOCKS
@@ -64,8 +64,8 @@ flowchart LR
   VOL[("wtc-basic.pnpm → /pnpm")] --- C1 & C2
 ```
 
-- **socat（`hostForwards`）**：入方向。把宿主机上的常用端口带进容器，容器内代码按 `127.0.0.1:<port>` 访问即可，无需改配置。
-- **microsock（`socksPort`）**：出方向。把容器内所有 `LISTEN 127.0.0.1:*` 的服务以一个 SOCKS5 代理暴露给宿主机（默认绑定 `0.0.0.0`，局域网设备也可使用），不需要逐个发布端口。
+- **forward（`hostForwards`）**：入方向。把宿主机上的常用端口带进容器，容器内代码按 `127.0.0.1:<port>` 访问即可，无需改配置。
+- **socks（`socksPort`）**：出方向。把容器内所有 `LISTEN 127.0.0.1:*` 的服务以一个 SOCKS5 代理暴露给宿主机（默认绑定 `0.0.0.0`，局域网设备也可使用），不需要逐个发布端口。
 
 ### 3.1 仓库布局（规划）
 
@@ -77,14 +77,15 @@ flowchart LR
 | `packages/lib/src/status/` | 读取/监听 `.wtc/run/<name>/status.json` |
 | `packages/lib/src/{health,scripts,tunnel,open,gc,doctor}/` | 各子功能 |
 | `packages/cli/` | 参数解析 + 渲染，零业务逻辑；bin 名 `wtc` |
-| `kit/` | 挂载到容器 `/wtc/bin`：`wtc-entry`、`wtc-signal`、`wtc-install`，以及 linux/amd64+arm64 静态 `microsock`、`socat`、`jq` |
+| `kit/` | 挂载到容器 `/wtc/bin`：bash 脚本 `wtc-entry`、`wtc-signal`、`wtc-install`，以及 Go 静态二进制 `wtc-kit`（linux/amd64+arm64；子命令 `socks`、`forward`、`status`） |
 | `examples/setup-basic/` | 参考 setup，兼作集成测试 fixture |
 | `packages/cli/skill/SKILL.md` | 面向 agent 的 CLI 使用说明（§15） |
 | `docs/authoring-setup.md` | setup 编写指南（§15） |
 
 - **技术栈**：Bun + TypeScript monorepo（bun workspaces）；分发用 `bun build --compile`。
 - **kit 分发**：kit 嵌入 CLI 二进制，首次运行时解压到 `~/.cache/wtc/kit/<version>/` 后只读挂载。路径带版本号，升级 wtc 不影响运行中的容器。
-- **为什么不是 Go**：manifest 需要 TS（类型 + 逻辑），未来 webui 要共享类型；runtime 走 CLI，Go SDK 的优势用不上。如果容器内的 kit 变复杂，可以单独用 Go 写静态 `wtc-agent`（future）。
+- **为什么 host 侧不是 Go**：manifest 需要 TS（类型 + 逻辑），未来 webui 要共享类型；runtime 走 CLI，Go SDK 的优势用不上。
+- **为什么容器内用 Go `wtc-kit`**：静态 socat 难以构建，microsocks 需要按架构编 C；Go 交叉编译一个二进制就能替代 socat / microsocks / jq，镜像零额外依赖。
 
 ### 3.2 Runtime 适配层
 
@@ -135,9 +136,10 @@ setups/basic/
 | `cwd` | shell / run / open 的默认目录 |
 | `scripts` | `{ name: { run, description } }` |
 | `checks` | `{ name: { run, timeout? } }`，多个子项聚合为整体 health |
-| `hostForwards` | `number[]`，如 `[3306, 6379]`：容器内 socat 监听 `127.0.0.1:<p>` → `host.docker.internal:<p>` |
-| `socksPort` | microsock 在容器内的监听端口，默认 `1080`；不得出现在 `hostForwards` 中 |
+| `hostForwards` | `number[]`，如 `[3306, 6379]`：容器内 `wtc-kit forward` 监听 `127.0.0.1:<p>` → `host.docker.internal:<p>` |
+| `socksPort` | `wtc-kit socks` 在容器内的监听端口，默认 `1080`；不得出现在 `hostForwards` 中 |
 | `socksBind` | 宿主机侧绑定地址，默认 `0.0.0.0`（局域网可访问）；设为 `127.0.0.1` 则仅本机可用 |
+| `socksAuth` | 可选 `{ user, pass }`，启用 SOCKS5 用户名密码认证 |
 | `socksHostPortRange` | 宿主机端口分配区间，默认 `[21080, 21179]`，见 §10 |
 | `mounts` | 自定义挂载，见 §5.2 |
 | `preRemove` | rm 前检查脚本，非 0 拒绝 |
@@ -181,7 +183,7 @@ mounts: [
 ### 6.2 镜像约定（`wtc doctor` 可检查）
 
 - 预装：bash、git、openssh-client、`flock`（util-linux）、node ≥ 22、pnpm ≥ 11；tmux 为推荐项。
-- socat / microsock / jq 由 kit 提供，镜像不必安装。
+- 端口转发、SOCKS5、status JSON 读写均由 kit 的 `wtc-kit` 提供，镜像不必安装 socat / jq。
 - entrypoint 被覆盖为 `/wtc/bin/wtc-entry`，镜像自身的 `ENTRYPOINT` / `CMD` 不生效。
 
 ### 6.3 Repo 侧约定
@@ -208,7 +210,7 @@ sequenceDiagram
   participant S as /wtc/run/status.json
   H->>E: create + start（tini → wtc-entry；env: params, WTC_*）
   E->>S: booting{bootId, startedAt}
-  E->>E: ~/.ssh、PNPM_CONFIG_*、socat (hostForwards)、microsock (socksPort)
+  E->>E: ~/.ssh、PNPM_CONFIG_*、wtc-kit forward (hostForwards)、wtc-kit socks (socksPort)
   E->>I: 执行，stdout/stderr tee → /wtc/log/init.<bootId>.log
   I->>S: wtc-signal phase clone|install|start ...
   alt 退出码 0
@@ -226,7 +228,7 @@ sequenceDiagram
 - **status.json**：`{ bootId, startedAt, state: "booting"|"ready"|"failed", phase, message?, exitCode?, reason?: "exit"|"timeout", history: [...] }`。
 - **约定阶段名**：`bootstrap`、`clone`、`install`、`start`（可扩展）。
 - **防陈旧**：`status.startedAt < inspect.State.StartedAt` 时视为 `booting（尚无信号）`。两个时间都来自 daemon 所在机器（colima 下即 VM）的时钟，不受宿主机时钟偏差影响。
-- **注入 env**：`WTC_SETUP_ID`、`WTC_NAME`、`WTC_CWD`、`WTC_INIT`、`WTC_READY_TIMEOUT`、`WTC_SOCKS_PORT`、`WTC_HOST_FORWARDS`。
+- **注入 env**：`WTC_SETUP_ID`、`WTC_NAME`、`WTC_CWD`、`WTC_INIT`、`WTC_READY_TIMEOUT`、`WTC_SOCKS_PORT`、`WTC_SOCKS_USER` / `WTC_SOCKS_PASS`（配置 socksAuth 时）、`WTC_HOST_FORWARDS`（逗号分隔）。
 
 ## 8. 实例状态机
 
@@ -281,10 +283,10 @@ setup 解析顺序：`--setup <dir>` → `WTC_SETUP` → 从 cwd 向上查找 `w
   - **分配**：取 `socksHostPortRange` 中第一个满足条件的端口：既不在任何 wtc 容器（跨 setup）的 `wtc.socksHostPort` label 中，宿主机上也未被监听。`--socks-host-port` 可手动指定。端口写入 label 与 `create.json`。
   - **冲突**：docker 在 start 时才绑定端口，create 阶段不报错（已验证）。首次 `up` 时 start 报端口占用 → 删除容器，换下一个端口重试（顺带解决并发 `up` 不同实例时的竞争）。已有实例 start 时端口被其他进程占用 → 报错，提示释放端口或 `rm` 重建。
   - `socksBind` / 端口是创建时参数，修改需 `rm` 重建。
-- **入方向（容器 → host）**：socat 按 `hostForwards` 监听容器内 `127.0.0.1:<p>`，转发到 `host.docker.internal:<p>`；平台前提见 §2。
+- **入方向（容器 → host）**：`wtc-kit forward` 按 `hostForwards` 监听容器内 `127.0.0.1:<p>`，转发到 `host.docker.internal:<p>`；平台前提见 §2。
 - **NO_PROXY 陷阱**：宿主机上常见 `NO_PROXY=localhost,127.0.0.1`，它会让 curl/浏览器绕过 SOCKS，直连宿主机上的同端口服务（已复现）。`wtc tunnel` 输出须提示使用 `socks5h://` 并去掉 localhost 绕过。
 - **局域网访问（colima）**：lima 的 grpc 端口转发会在 macOS 上监听 `*:<port>`，局域网可达（已验证）。前提是 macOS 防火墙放行 `limactl`；brew 升级 lima 后二进制路径会变，需要重新放行。
-- **安全边界**：microsock 无鉴权。默认 `0.0.0.0` 时，**局域网内任何人**都能经它访问容器内所有 `127.0.0.1` 服务，并借容器访问宿主机（`host.docker.internal`，colima 下包括宿主机上仅监听 `127.0.0.1` 的服务）以及容器能访问的任何网络，相当于一个开放代理。在不可信网络中应设 `socksBind: "127.0.0.1"`。同一 docker 网络中的其他容器也能直接连它。
+- **安全边界**：未配置 `socksAuth` 时 SOCKS 无鉴权。默认 `0.0.0.0` 时，**局域网内任何人**都能经它访问容器内所有 `127.0.0.1` 服务，并借容器访问宿主机（`host.docker.internal`，colima 下包括宿主机上仅监听 `127.0.0.1` 的服务）以及容器能访问的任何网络，相当于一个开放代理。在不可信网络中应设 `socksBind: "127.0.0.1"` 或配置 `socksAuth`。同一 docker 网络中的其他容器也能直接连它。
 - 已验证链路（colima）：host `curl --socks5-hostname 127.0.0.1:<port>` → 发布端口 → 容器内 SOCKS5 → 容器内 `127.0.0.1:5173` ✅；局域网 IP 访问 `0.0.0.0` 发布端口 ✅。
 
 ## 11. GC（host 负责）
@@ -343,5 +345,5 @@ flowchart TB
 ## 16. Future work
 
 - webui：基于 lib 事件流 + SSE；PAC / SwitchyOmega 配置生成。
-- Go 静态 `wtc-agent` 替代 kit 中的 shell 脚本与 socat/jq/microsock。
+- 将 kit 中的 bash 脚本（entry / signal / install）也并入 `wtc-kit`。
 - GVS store 空间回收：需要 pnpm 支持回收 `links/`，或由 wtc 基于各实例 lockfile 自行计算引用集。

@@ -405,3 +405,19 @@ describe("ls / status", () => {
     expect(await status(t.ctx, "zz")).toMatchObject({ name: "zz", container: C("zz"), state: "absent", staleImage: false });
   });
 });
+
+describe("carried-over fixes (task 7)", () => {
+  test("new instance: bind sources validated before build/volume creation", async () => {
+    const t = setup({ mounts: [{ type: "bind", source: "/somewhere/else", target: "/x" }] as never });
+    t.rt.platformInfo = { kind: "colima", arch: "arm64", hostGatewayFlag: false, bindableRoots: [t.home] };
+    const e = await err(collect(up(t.ctx, "a", { wait: false })));
+    expect(e?.code).toBe("BIND_NOT_SHARED");
+    expect(ops(t)).not.toContain("build");
+    expect(ops(t)).not.toContain("volumeCreate");
+  });
+  test("existing instance: unknown --set key -> PARAM_UNKNOWN", async () => {
+    const t = setup({ params: { A: { description: "a", default: "1" } } });
+    await created(t);
+    expect((await err(collect(up(t.ctx, "a", { set: { NOPE: "1" } }))))?.code).toBe("PARAM_UNKNOWN");
+  });
+});

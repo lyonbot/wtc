@@ -20,6 +20,14 @@ export function resolveBindSource(source: string, setupDir: string, home: string
 
 const under = (p: string, root: string) => p === root || p.startsWith(root.endsWith("/") ? root : root + "/");
 
+/** Throws BIND_NOT_SHARED when any bind source is outside the runtime's shared roots (colima). */
+export function assertBindable(sources: string[], roots: string[] | undefined): void {
+  if (!roots) return;
+  const bad = sources.filter((s) => !roots.some((r) => under(s, r)));
+  if (bad.length)
+    throw new WtcError("BIND_NOT_SHARED", `bind sources not shared with the runtime VM: ${bad.join(", ")}`, `move them under ${roots.join(" or ")}`);
+}
+
 /** Pure: the full container spec for `wtc up` (spec §6.1, §7, §10). */
 export function buildCreateSpec(o: {
   ctx: InstanceContext;
@@ -68,12 +76,7 @@ export function buildCreateSpec(o: {
     }
   }
 
-  const roots = o.platform.bindableRoots;
-  if (roots) {
-    const bad = mounts.filter((x) => x.type === "bind" && !roots.some((r) => under(x.source, r))).map((x) => x.source);
-    if (bad.length)
-      throw new WtcError("BIND_NOT_SHARED", `bind sources not shared with the runtime VM: ${bad.join(", ")}`, `move them under ${roots.join(" or ")}`);
-  }
+  assertBindable(mounts.filter((x) => x.type === "bind").map((x) => x.source), o.platform.bindableRoots);
   // agent socket path lives inside the VM on colima; not subject to bindableRoots
   if (o.platform.sshAgentSource) mounts.push({ type: "bind", source: o.platform.sshAgentSource, target: "/wtc/ssh-agent.sock" });
 

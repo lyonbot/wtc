@@ -1,14 +1,14 @@
 import { mkdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { WtcError } from "../errors";
 import { type Health, runChecks } from "../health/health";
-import { assertId, containerName, imageRef, imageRepo, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
+import { assertId, containerName, imageRef, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
 import type { ContainerInfo, Runtime } from "../runtime/types";
 import { computeImageHash } from "../setup/image-hash";
 import type { LoadedSetup } from "../setup/load";
 import { type InstanceState, mergeState, readStatus } from "../status/status";
-import { buildCreateSpec, instancePaths } from "./create-spec";
-import { diffParams, resolveParams } from "./params";
+import { build, hasImage } from "../ops/build";
+import { assertBindable, buildCreateSpec, instancePaths, resolveBindSource } from "./create-spec";
+import { assertKnownParams, diffParams, resolveParams } from "./params";
 import { allocateSocksPort } from "./ports";
 import { prepareSshDir } from "./ssh";
 
@@ -74,7 +74,7 @@ async function logTail(ctx: InstanceContext, name: string, bootId?: string): Pro
   }
 }
 
-async function summarize(ctx: InstanceContext, name: string, info: ContainerInfo | null, hash: string): Promise<InstanceSummary> {
+export async function summarize(ctx: InstanceContext, name: string, info: ContainerInfo | null, hash: string): Promise<InstanceSummary> {
   const p = instancePaths(ctx.setup.dir, name);
   const merged = mergeState(info, await readStatus(p.status));
   const s: InstanceSummary = {
@@ -145,9 +145,15 @@ async function* createInstance(
   const params = resolveParams(m, o.set ?? {});
   const platform = await rt.platform();
 
-  if (!(await rt.imageLs(imageRepo(id))).some((i) => i.ref === ref)) {
+  // fail fast (before build / volumes): every bind source must be shared with the runtime VM
+  assertBindable(
+    [ctx.kitDir, setup.dir, p.ssh, p.run, p.log, ...m.mounts.flatMap((mt) => (mt.type === "bind" ? [resolveBindSource(mt.source, setup.dir, ctx.home)] : []))],
+    platform.bindableRoots,
+  );
+
+  if (!(await hasImage(ctx, ref))) {
     yield { type: "action", action: "build", detail: ref };
-    await rt.build({ context: resolve(setup.dir, m.image.context), dockerfile: m.image.dockerfile, tag: ref, buildArgs: m.image.buildArgs });
+    await build(ctx, {});
   }
 
   yield { type: "action", action: "create", detail: container };
@@ -215,6 +221,7 @@ export async function* up(
   if (!existing) {
     yield* createInstance(ctx, name, o, imageRef(m.id, hash));
   } else {
+    assertKnownParams(m, o.set ?? {});
     const rec = await readCreate(p.create);
     const bad = rec ? diffParams(rec.params, o.set ?? {}) : [];
     if (rec && o.socksBind !== undefined && o.socksBind !== rec.socksBind) bad.push("socksBind");

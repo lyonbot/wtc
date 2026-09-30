@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command, CommanderError } from "commander";
 import * as lib from "@wtc/lib";
-import { createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "@wtc/lib";
+import { AGENT_KINDS, createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type AgentKind, type Wtc } from "@wtc/lib";
 import skillMd from "../skill/SKILL.md" with { type: "text" };
 import { renderLs, renderSummary, table, upRenderer } from "./render";
 
@@ -133,6 +133,13 @@ export function buildProgram(): Command {
     }));
 
   p.command("shell <name>").description("interactive shell in the container").action(act(async (w, _c, name: string) => w.shell(name)));
+
+  p.command("agent <name> <kind> [args...]").description("run claude | codex in the container with the host login synced in (args after --)")
+    .allowUnknownOption()
+    .action(act(async (w, _c, name: string, kind: string, args: string[]) => {
+      if (!(AGENT_KINDS as readonly string[]).includes(kind)) throw new UsageError(`agent must be one of: ${AGENT_KINDS.join(", ")}`);
+      return w.agent(name, kind as AgentKind, args ?? []);
+    }));
 
   p.command("tunnel <name>").description("print socks proxy URLs").option("--json", jopt)
     .action(act(async (w, cmd, name: string) => {

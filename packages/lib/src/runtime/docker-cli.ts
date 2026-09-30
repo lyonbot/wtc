@@ -1,13 +1,15 @@
 import { homedir } from "node:os";
 import { WtcError } from "../errors";
 import { detectPlatform } from "./platform";
-import type { ContainerInfo, ContainerState, CreateSpec, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
+import type { ContainerInfo, ContainerState, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
 
 export interface SpawnOpts {
   env?: Record<string, string>;
   timeoutMs?: number;
   /** called for each stdout/stderr line as it arrives */
   onLine?: (line: string) => void;
+  /** stdin bytes; stdin is closed when omitted */
+  input?: Uint8Array;
 }
 export type SpawnFn = (argv: string[], opts: SpawnOpts) => Promise<ExecResult>;
 
@@ -33,7 +35,7 @@ async function readLines(stream: ReadableStream<Uint8Array>, onLine?: (l: string
 const bunSpawn: SpawnFn = async (argv, opts) => {
   let proc;
   try {
-    proc = Bun.spawn(argv, { env: opts.env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    proc = Bun.spawn(argv, { env: opts.env, stdout: "pipe", stderr: "pipe", stdin: opts.input ?? "ignore" });
   } catch (e) {
     return { exitCode: 127, stdout: "", stderr: String((e as Error).message ?? e) };
   }
@@ -147,19 +149,23 @@ export class DockerCliRuntime implements Runtime {
     await this.run(["rm", ...(force ? ["-f"] : []), name]);
   }
 
-  async exec(name: string, cmd: string[], o: { env?: Record<string, string>; workdir?: string; timeoutMs?: number } = {}) {
+  async exec(name: string, cmd: string[], o: ExecOpts = {}) {
     const a = ["exec"];
+    if (o.input) a.push("-i");
     for (const [k, v] of Object.entries(o.env ?? {})) a.push("-e", `${k}=${v}`);
     if (o.workdir) a.push("-w", o.workdir);
     a.push(name, ...cmd);
     // exec returns the command's own exit code; only docker-level failures throw
-    const r = await this.spawn([this.bin, ...a], { env: this.env as Record<string, string>, timeoutMs: o.timeoutMs });
+    const r = await this.spawn([this.bin, ...a], {
+      env: this.env as Record<string, string>, timeoutMs: o.timeoutMs, input: o.input, onLine: o.onLine,
+    });
     if (/Cannot connect to the Docker daemon/i.test(r.stderr)) this.fail(r);
     return r;
   }
-  async execInteractive(name: string, cmd: string[], o: { workdir?: string; tty?: boolean } = {}) {
+  async execInteractive(name: string, cmd: string[], o: { workdir?: string; tty?: boolean; env?: Record<string, string> } = {}) {
     const a = [this.bin, "exec", "-i"];
     if (o.tty ?? process.stdin.isTTY) a.push("-t");
+    for (const [k, v] of Object.entries(o.env ?? {})) a.push("-e", `${k}=${v}`);
     if (o.workdir) a.push("-w", o.workdir);
     a.push(name, ...cmd);
     const p = Bun.spawn(a, { env: this.env as Record<string, string>, stdin: "inherit", stdout: "inherit", stderr: "inherit" });

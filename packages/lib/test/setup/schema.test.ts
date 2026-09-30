@@ -22,7 +22,20 @@ describe("manifest schema", () => {
       mounts: [],
       readyTimeout: 900,
       ssh: { knownHosts: [] },
+      agents: {
+        claude: { env: {}, args: [], version: "latest" },
+        codex: { env: {}, args: [], version: "latest" },
+      },
     });
+  });
+  test("agents: env literal / fromHost / null, args, version; strict", () => {
+    const m = ok({ agents: { claude: { env: { A: "1", B: { fromHost: "X" }, C: null }, args: ["--model", "opus"], version: "2.1.0" } } });
+    expect(m.agents.claude).toEqual({ env: { A: "1", B: { fromHost: "X" }, C: null }, args: ["--model", "opus"], version: "2.1.0" });
+    expect(m.agents.codex).toEqual({ env: {}, args: [], version: "latest" });
+    bad({ agents: { gemini: {} } });
+    bad({ agents: { claude: { env: { lower: "x" } } } });
+    bad({ agents: { claude: { env: { A: { fromHost: "" } } } } });
+    bad({ agents: { claude: { extra: 1 } } });
   });
   test("check timeout default", () => {
     expect(ok({ checks: { web: { run: "true" } } }).checks.web!.timeout).toBe(10);

@@ -32,6 +32,15 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
 }
+export interface ExecOpts {
+  env?: Record<string, string>;
+  workdir?: string;
+  timeoutMs?: number;
+  /** bytes fed to the command's stdin (adds `docker exec -i`) */
+  input?: Uint8Array;
+  /** called for each stdout/stderr line as it arrives */
+  onLine?: (line: string) => void;
+}
 export interface PlatformInfo {
   kind: "linux" | "colima" | "other";
   arch: "amd64" | "arm64";
@@ -53,9 +62,9 @@ export interface Runtime {
   stop(name: string, timeoutSec?: number): Promise<void>;
   restart(name: string, timeoutSec?: number): Promise<void>;
   rm(name: string, force?: boolean): Promise<void>;
-  exec(name: string, cmd: string[], o?: { env?: Record<string, string>; workdir?: string; timeoutMs?: number }): Promise<ExecResult>;
+  exec(name: string, cmd: string[], o?: ExecOpts): Promise<ExecResult>;
   /** inherits stdio, returns exit code */
-  execInteractive(name: string, cmd: string[], o?: { workdir?: string; tty?: boolean }): Promise<number>;
+  execInteractive(name: string, cmd: string[], o?: { workdir?: string; tty?: boolean; env?: Record<string, string> }): Promise<number>;
   inspect(name: string): Promise<ContainerInfo | null>;
   /** Includes stopped containers. Empty `labels` = all wtc containers (those carrying label key `wtc.setup`). */
   ps(labels: Record<string, string>): Promise<ContainerInfo[]>;

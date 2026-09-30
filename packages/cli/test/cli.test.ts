@@ -21,7 +21,7 @@ describe("cli", () => {
 
   test("--help lists all commands", async () => {
     const r = await wtc(["--help"]);
-    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "tunnel", "open", "gc", "skill", "doctor"])
+    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "gc", "skill", "doctor"])
       expect(r.out).toContain(c);
   });
 

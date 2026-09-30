@@ -120,3 +120,23 @@ test("misc argv", async () => {
   expect(m.calls[4]).toEqual(["docker", "volume", "create", "--label", "k=v", "v"]);
   expect(m.calls[5]).toEqual(["docker", "run", "--rm", "-e", "E=1", "--mount", "type=bind,src=/h,dst=/t,readonly", "i", "c"]);
 });
+
+test("exec: input adds -i and is fed to stdin; onLine forwarded", async () => {
+  const seen: { input?: Uint8Array; onLine?: unknown }[] = [];
+  const calls: string[][] = [];
+  const rt = new DockerCliRuntime({
+    spawn: async (argv, o) => {
+      calls.push(argv);
+      seen.push(o);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    },
+  });
+  const input = new Uint8Array([1, 2]);
+  const onLine = () => {};
+  await rt.exec("c", ["tar", "-x"], { input, onLine, env: { A: "1" } });
+  expect(calls[0]).toEqual(["docker", "exec", "-i", "-e", "A=1", "c", "tar", "-x"]);
+  expect(seen[0]!.input).toBe(input);
+  expect(seen[0]!.onLine).toBe(onLine);
+  await rt.exec("c", ["true"]);
+  expect(calls[1]).toEqual(["docker", "exec", "c", "true"]);
+});

@@ -4,6 +4,7 @@ import * as inst from "./instance/instance";
 import type { InstanceContext, InstanceSummary, UpEvent } from "./instance/instance";
 import { ensureKit } from "./kit/embed";
 import { containerName } from "./naming";
+import { agent } from "./ops/agent";
 import { build } from "./ops/build";
 import { doctor } from "./ops/doctor";
 import { check, run, shell } from "./ops/exec";
@@ -15,6 +16,7 @@ import { DockerCliRuntime } from "./runtime/docker-cli";
 import type { Runtime } from "./runtime/types";
 import { computeImageHash } from "./setup/image-hash";
 import { type LoadedSetup, loadSetup } from "./setup/load";
+import type { AgentKind } from "./setup/schema";
 
 type Fn<K extends keyof typeof inst> = (typeof inst)[K] extends (ctx: InstanceContext, ...a: infer A) => infer R ? (...a: A) => R : never;
 
@@ -32,6 +34,7 @@ export interface Wtc {
   run(name: string, script: string, args: string[]): Promise<number>;
   check(name: string): Promise<{ health: Health; items: CheckResult[] }>;
   shell(name: string): Promise<number>;
+  agent(name: string, kind: AgentKind, args: string[]): Promise<number>;
   logs(name: string, o?: { follow?: boolean; boot?: string; signal?: AbortSignal }): AsyncIterable<string>;
   tunnel(name: string): ReturnType<typeof tunnel>;
   open(name: string, editor?: "code" | "cursor"): ReturnType<typeof open>;
@@ -92,6 +95,7 @@ export async function createWtc(o: { setupDir: string; runtime?: Runtime; cacheD
     run: (n, s, a) => run(ctx, n, s, a),
     check: (n) => check(ctx, n),
     shell: (n) => shell(ctx, n),
+    agent: (n, k, a) => agent(ctx, n, k, a),
     logs: (n, x) => logs(ctx, n, x),
     tunnel: (n) => tunnel(ctx, n),
     open: (n, e) => open(ctx, n, e),

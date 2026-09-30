@@ -18,6 +18,7 @@ export * from "./instance/create-spec";
 export * from "./instance/instance";
 export * from "./ops/build";
 export * from "./ops/exec";
+export * from "./ops/agent";
 export * from "./ops/logs";
 export * from "./ops/tunnel";
 export * from "./ops/open";

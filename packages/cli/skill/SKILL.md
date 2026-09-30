@@ -28,6 +28,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc run <name> <script> [-- args]` - manifest script in the container; exits with its exit code.
 - `wtc check <name> [--json]` - run health checks now.
 - `wtc shell <name>` - interactive shell (needs a TTY; exits with the shell's code).
+- `wtc agent <name> <claude|codex> [-- args]` - run Claude Code / Codex in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<kind>`.
 - `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state.
@@ -48,6 +49,8 @@ States: `absent` `stopped` `booting` `ready` `failed`. Names match `^[a-z0-9]+(-
 3. Always `socks5h` (DNS in container). Unset `NO_PROXY`/`no_proxy` entries for `localhost`/`127.0.0.1` for that client, otherwise it bypasses the proxy and hits the host's own port.
 
 **Run a script**: `wtc run feat-x test -- --watch=false`; the exit code is the script's.
+
+**Delegate to an agent inside the container**: `wtc agent feat-x claude -- -p "run the tests and fix failures"` (or `wtc agent feat-x codex -- exec "…"`). Put agent flags after `--`.
 
 **Debug a failed boot**
 1. `wtc status feat-x` (phase + message).
@@ -87,6 +90,11 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `NO_FREE_PORT` | no free port in `socksHostPortRange` | free ports or pass `--socks-host-port` |
 | `PREREMOVE_REJECTED` | `preRemove` exited non-zero (e.g. unpushed work) | resolve the issue, or `rm --force` (loses work) |
 | `RM_NEEDS_RUNNING` | `preRemove` needs a running container | `wtc start <name>` then `rm`, or `rm --force` |
+| `AGENT_NO_CREDENTIALS` | the host has no Claude / Codex login | log in on the host (`claude`, `codex login`) |
+| `AGENT_ENV_MISSING` | an `agents.<kind>.env` `fromHost` variable is unset on the host | export it on the host |
+| `AGENT_INSTALL_FAILED` | auto-install failed, or the agent and npm are both missing | check container network; preinstall the agent in the image |
+| `AGENT_IMAGE_UNSUPPORTED` | the image lacks bash / tar | add them to the image |
+| `AGENT_SYNC_FAILED` | copying the agent config into the container failed | read the message; check disk space / `$HOME` permissions |
 
 An instance in `failed` state keeps its container: debug (see flow above), then `wtc restart`.
 
@@ -94,4 +102,5 @@ An instance in `failed` state keeps its container: debug (see flow above), then 
 
 - `wtc rm` runs the manifest `preRemove` (e.g. unpushed-work check) and refuses on non-zero. `--force` skips it and deletes instance volumes: unpushed work is lost. Never use `--force` without the user's consent.
 - SOCKS has no auth unless the manifest sets `socksAuth`. With the default bind `0.0.0.0`, anyone on the LAN can use it to reach the container's `127.0.0.1`, the host (`host.docker.internal`) and any network the container reaches. Prefer `--socks-bind 127.0.0.1` on untrusted networks; the bind is fixed at creation (`rm` + `up` to change).
+- `wtc agent` copies the host's agent credentials into the container and skips permission prompts: code in the container can read them. Use only with trusted repositories.
 - Image changes show as `staleImage: true` (`IMAGE` column `stale`); wtc never rebuilds instances automatically.

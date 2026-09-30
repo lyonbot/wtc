@@ -61,6 +61,19 @@ describe("cli in-process", () => {
     expect(c.args[1]).toEqual(["bash", "-lc", 'x "$@"', "s", "-x"]);
   });
 
+  test("agent: validates kind (exit 2), passes args after -- and the exit code through", async () => {
+    const { load } = await withInstance();
+    const w = await load();
+    let got: unknown[] = [];
+    w.agent = async (...a) => { got = a; return 5; };
+    const bad = await capture(() => runCli(["bun", "wtc", "agent", "a", "gemini"], load));
+    expect(bad.code).toBe(2);
+    expect(bad.err).toContain("claude, codex");
+    const r = await capture(() => runCli(["bun", "wtc", "agent", "a", "codex", "--", "exec", "-m", "x", "--json"], load));
+    expect(r.code).toBe(5);
+    expect(got).toEqual(["a", "codex", ["exec", "-m", "x", "--json"]]);
+  });
+
   test("up ending failed: prints log tail + restart hint, exit 1", async () => {
     const summary = { name: "a", container: "c", state: "failed", phase: "install", message: "exit 3", staleImage: false } as const;
     const events: UpEvent[] = [

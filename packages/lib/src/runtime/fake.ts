@@ -1,11 +1,11 @@
 import { WtcError } from "../errors";
-import type { ContainerInfo, CreateSpec, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
+import type { ContainerInfo, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
 
 /** In-memory Runtime for tests. Records every call in `calls`. */
 export class FakeRuntime implements Runtime {
   calls: { op: string; args: unknown[] }[] = [];
   failNextStart?: WtcError;
-  execHandler?: (name: string, cmd: string[]) => ExecResult;
+  execHandler?: (name: string, cmd: string[], o?: ExecOpts) => ExecResult;
   platformInfo: PlatformInfo = { kind: "linux", arch: "amd64", hostGatewayFlag: true };
   containers = new Map<string, { info: ContainerInfo; spec: CreateSpec }>();
   volumes = new Map<string, Record<string, string>>();
@@ -75,14 +75,14 @@ export class FakeRuntime implements Runtime {
     if (c.info.state === "running" && !force) throw new WtcError("RUNTIME_ERROR", `cannot remove running container ${name}`);
     this.containers.delete(name);
   }
-  async exec(name: string, cmd: string[], o?: { env?: Record<string, string>; workdir?: string; timeoutMs?: number }) {
+  async exec(name: string, cmd: string[], o?: ExecOpts) {
     this.rec("exec", name, cmd, o);
     this.get(name);
-    return this.execHandler ? this.execHandler(name, cmd) : { exitCode: 0, stdout: "", stderr: "" };
+    return this.execHandler ? this.execHandler(name, cmd, o) : { exitCode: 0, stdout: "", stderr: "" };
   }
-  async execInteractive(name: string, cmd: string[], o?: { workdir?: string; tty?: boolean }) {
+  async execInteractive(name: string, cmd: string[], o?: { workdir?: string; tty?: boolean; env?: Record<string, string> }) {
     this.rec("execInteractive", name, cmd, o);
-    return (await this.exec(name, cmd)).exitCode;
+    return (await this.exec(name, cmd, o?.env ? { env: o.env } : undefined)).exitCode;
   }
   async inspect(name: string) {
     this.rec("inspect", name);

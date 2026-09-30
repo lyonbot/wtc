@@ -27,6 +27,13 @@ const param = z.object({
   }, "pattern is not a valid RegExp").optional(),
 });
 
+const envKey = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "env key must match ^[A-Z_][A-Z0-9_]*$");
+const agent = z.object({
+  env: z.record(envKey, z.union([z.string(), z.object({ fromHost: z.string().min(1) }).strict(), z.null()])).default({}),
+  args: z.array(z.string()).default([]),
+  version: z.string().min(1).default("latest"),
+}).strict().default({});
+
 export const manifestSchema = z.object({
   id,
   image: z.object({
@@ -48,6 +55,7 @@ export const manifestSchema = z.object({
   preRemove: z.string().optional(),
   readyTimeout: z.number().positive().default(900),
   ssh: z.object({ knownHosts: z.array(z.string()).default([]) }).default({}),
+  agents: z.object({ claude: agent, codex: agent }).strict().default({}),
 }).superRefine((m, ctx) => {
   if (m.hostForwards.includes(m.socksPort))
     ctx.addIssue({ code: "custom", path: ["socksPort"], message: "socksPort must not appear in hostForwards" });
@@ -77,6 +85,18 @@ export interface Manifest {
   preRemove?: string;
   readyTimeout: number;
   ssh: { knownHosts: string[] };
+  agents: Record<AgentKind, AgentConfig>;
+}
+
+export type AgentKind = "claude" | "codex";
+/** Per-agent options for `wtc agent`; applied at launch only (never part of the container spec). */
+export interface AgentConfig {
+  /** string = literal, `fromHost` = read from the host env at launch, null = drop a built-in variable */
+  env: Record<string, string | { fromHost: string } | null>;
+  /** appended after the built-in args, before CLI args */
+  args: string[];
+  /** npm version / dist-tag used when auto-installing */
+  version: string;
 }
 
 export type ManifestInput = z.input<typeof manifestSchema>;

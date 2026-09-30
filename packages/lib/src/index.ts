@@ -9,3 +9,5 @@ export * from "./runtime/fake";
 export * from "./runtime/docker-cli";
 export * from "./runtime/platform";
 export * from "./kit/embed";
+export * from "./status/status";
+export * from "./health/health";

@@ -2,34 +2,40 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WtcError } from "../errors";
 import { addDir, addFile, addMcpRemoteAuth, Bundle, portableServers } from "./bundle";
+import { type AgentContext, type AgentOptions, agentConfigTarget, type AgentDefinition, defineAgent, expandHost, extendAgent } from "./define";
 import type { HostEnv } from "./host";
 
 /** config.toml keys worth carrying into a container; the rest is host paths, host commands or desktop-only. */
 const CONFIG_KEEP = ["model", "model_provider", "model_reasoning_effort", "service_tier", "model_providers", "mcp_servers", "features"];
 
-export const codexDir = (h: HostEnv) => h.env.CODEX_HOME || join(h.home, ".codex");
+/** Host Codex home: a variant's `configDir`, else CODEX_HOME, else ~/.codex. */
+export const codexDir = (h: HostEnv, configDir?: string) => configDir || h.env.CODEX_HOME || join(h.home, ".codex");
 
-/** Build the Codex part of the bundle; `cwd` is pre-trusted so the TUI skips its folder-trust prompt. */
-export function codexBundle(h: HostEnv, cwd: string): Bundle {
+/**
+ * Build the Codex part of the bundle; `cwd` is pre-trusted so the TUI skips its folder-trust prompt.
+ * `configDir` is the host dir to read, `target` the container dir (relative to $HOME) it lands in.
+ */
+export function codexBundle(h: HostEnv, cwd: string, o: { configDir?: string; target?: string } = {}): Bundle {
   const b = new Bundle();
-  const dir = codexDir(h);
+  const dir = codexDir(h, o.configDir);
+  const T = o.target ?? ".codex";
   let auth: Uint8Array;
   try {
     auth = readFileSync(join(dir, "auth.json"));
   } catch {
     throw new WtcError("AGENT_NO_CREDENTIALS", `no Codex login found on the host (${join(dir, "auth.json")})`,
-      "run `codex login` on the host; with cli_auth_credentials_store = \"keyring\" set it to \"file\"");
+      `run \`${o.configDir ? `CODEX_HOME=${o.configDir} ` : ""}codex login\` on the host; with cli_auth_credentials_store = "keyring" set it to "file"`);
   }
-  b.add(".codex/auth.json", auth, "600");
+  b.add(`${T}/auth.json`, auth, "600");
   // MCP OAuth tokens when the host uses file storage (e.g. Linux without a keyring); Keychain-stored ones are not read
-  addFile(b, join(dir, ".credentials.json"), ".codex/.credentials.json", "600");
+  addFile(b, join(dir, ".credentials.json"), `${T}/.credentials.json`, "600");
   let toml = "";
   try {
     toml = readFileSync(join(dir, "config.toml"), "utf8");
   } catch { /* no config */ }
-  b.add(".codex/config.toml", filterCodexConfig(toml, h.home, cwd));
-  addFile(b, join(dir, "AGENTS.md"), ".codex/AGENTS.md");
-  addDir(b, join(dir, "skills"), ".codex/skills", (rel) => rel === ".system");
+  b.add(`${T}/config.toml`, filterCodexConfig(toml, h.home, cwd));
+  addFile(b, join(dir, "AGENTS.md"), `${T}/AGENTS.md`);
+  addDir(b, join(dir, "skills"), `${T}/skills`, (rel) => rel === ".system");
   addDir(b, join(h.home, ".agents", "skills"), ".agents/skills");
   addMcpRemoteAuth(b, h.home, h.env);
   return b;
@@ -73,4 +79,30 @@ export function toToml(obj: Record<string, unknown>, path: string[] = []): strin
   if (s) s += "\n";
   for (const [k, v] of tables) s += toToml(v, [...path, k]);
   return s;
+}
+
+export interface CodexAgentOptions extends AgentOptions {
+  /** host Codex home to sync (`~/` = host home) instead of CODEX_HOME / ~/.codex; the container gets CODEX_HOME */
+  configDir?: string;
+}
+
+/**
+ * Codex with the host login and user-level config synced in, approvals and inner sandbox off.
+ * `o` layers on top (see extendAgent); `o.configDir` selects another host Codex home.
+ */
+export function defineCodexAgent(o: CodexAgentOptions = {}): AgentDefinition {
+  const { configDir, ...rest } = o;
+  return extendAgent(defineAgent({
+    bin: "codex",
+    pkg: "@openai/codex",
+    // bwrap cannot create namespaces in an unprivileged container; other defaults live in the synced config.toml.
+    // the shared app-server daemon needs `ps` (procps), which slim images lack; embedded mode works without it
+    args: (c: AgentContext) => ["--dangerously-bypass-approvals-and-sandbox", ...(c.has("ps") ? [] : ["--no-daemon"])],
+    sync(c) {
+      const host = configDir ? expandHost(c.host, configDir) : undefined;
+      const target = host ? agentConfigTarget(c.host.home, host, c.name) : undefined;
+      if (target) c.env.CODEX_HOME = `${c.home}/${target}`;
+      c.files.merge(codexBundle(c.host, c.cwd, { configDir: host, target }));
+    },
+  }), rest);
 }

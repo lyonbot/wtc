@@ -70,7 +70,7 @@ Not used by the example. An `init.sh` clone can borrow objects from an existing 
 
 ## Coding agents (`wtc agent`)
 
-`wtc agent <name> <claude|codex> [-- args]` runs the agent in the instance `cwd`. Flow: [packages/lib/src/ops/agent.ts](../packages/lib/src/ops/agent.ts); what gets synced: [packages/lib/src/agent/](../packages/lib/src/agent); design: [the agent spec](superpowers/specs/2026-10-01-wtc-agent-design.md).
+`wtc agent <name> <agent> [-- args]` runs a manifest agent (built-in `claude` / `codex`, or a custom one) in the instance `cwd`. Flow: [packages/lib/src/ops/agent.ts](../packages/lib/src/ops/agent.ts); what gets synced: [packages/lib/src/agent/](../packages/lib/src/agent); design: [the agent spec](superpowers/specs/2026-10-01-wtc-agent-design.md), [ADR 0001](adr/0001-agent-definitions.md).
 
 ```mermaid
 flowchart LR
@@ -79,9 +79,18 @@ flowchart LR
 ```
 
 - **Every launch** re-syncs the host login plus user-level config: Claude credentials (macOS Keychain first), user MCP servers, `settings.json` (minus `hooks` / `statusLine` / helper commands), `CLAUDE.md`, skills, plugins (without `.git`); Codex `auth.json`, a filtered `config.toml`, `AGENTS.md`, skills. Container-side history is kept.
-- **Permissions**: the container is the sandbox. claude gets `--dangerously-skip-permissions` (+ `IS_SANDBOX=1` for root), codex `--dangerously-bypass-approvals-and-sandbox` (bubblewrap cannot run in an unprivileged container). Built-ins also disable auto-update / telemetry (`AGENTS` in [ops/agent.ts](../packages/lib/src/ops/agent.ts); codex's go into the synced `config.toml`, since any `-c` forces codex into embedded mode). First-run dialogs (onboarding, folder trust, bypass / auto-mode prompts) are pre-answered.
-- **Manifest `agents.<claude|codex>`**: `env` (literal, `{ fromHost: "VAR" }`, or `null` to drop a built-in), `args` (before CLI args), `version` (auto-install version). Applied per launch; never recreates the container.
-- **Token refresh**: the container gets a copy of the host tokens and nothing is written back. If a long container session refreshes them, the host (or another container) may be logged out. For many concurrent containers prefer `claude setup-token` + `agents.claude.env.CLAUDE_CODE_OAUTH_TOKEN: { fromHost: "…" }` for Claude and an API key for Codex.
+- **Permissions**: the container is the sandbox. claude gets `--dangerously-skip-permissions` (+ `IS_SANDBOX=1` for root), codex `--dangerously-bypass-approvals-and-sandbox` (bubblewrap cannot run in an unprivileged container). Built-ins also disable auto-update / telemetry (`defineClaudeAgent` in [agent/claude.ts](../packages/lib/src/agent/claude.ts), `defineCodexAgent` in [agent/codex.ts](../packages/lib/src/agent/codex.ts); codex's go into the synced `config.toml`, since any `-c` forces codex into embedded mode). First-run dialogs (onboarding, folder trust, bypass / auto-mode prompts) are pre-answered.
+- **Manifest `agents`**: `claude` and `codex` exist without being declared. Every entry (overriding a built-in or adding one) must come from a helper exported by `wtc`; plain objects are rejected. Applied per launch; never recreates the container. Types and docs: [agent/define.ts](../packages/lib/src/agent/define.ts).
+  - `defineClaudeAgent(opts)` / `defineCodexAgent(opts)`: the built-ins, or variants under another name (`claude-custom: defineClaudeAgent({…})`). `opts` overlays `env` (literal, `{ fromHost: "VAR" }`, or `null` to drop a built-in), appends `args` (before CLI args), may set `bin` / `pkg` / `version`, add `sync` / `afterSync` hooks, and `configDir` (host config dir, e.g. `~/.claude-custom`): synced instead of the default one, mirrored at the same path under the container `$HOME` (outside the host home: `~/.wtc-agents/<name>`) and exported as `CLAUDE_CONFIG_DIR` / `CODEX_HOME`. A custom Claude dir uses its own Keychain item, like claude does.
+  - `defineAgent({ bin, pkg?, version?, env?, args?, probe?, sync?, afterSync? })`: any other CLI. Without `pkg` the bin must be preinstalled in the image.
+  - Hooks are async functions on the host with an `AgentContext`: file helpers (`copyFile` / `copyDir` from `~/…` on the host, `write`), `exec` in the container, editable `env`, `has(cmd)` from the probe.
+
+  ```mermaid
+  flowchart LR
+    P["probe container<br/>(bin, npm, tar, node, ps, probe[])"] --> S["sync(ctx)<br/>host side: files, env"] --> I["npm i -g pkg@version<br/>(if bin missing)"] --> X["extract files<br/>into $HOME"] --> A["afterSync(ctx)"] --> L["exec bin args… CLI args"]
+  ```
+
+- **Token refresh**: the container gets a copy of the host tokens and nothing is written back. If a long container session refreshes them, the host (or another container) may be logged out. For many concurrent containers prefer `claude setup-token` + `claude: defineClaudeAgent({ env: { CLAUDE_CODE_OAUTH_TOKEN: { fromHost: "…" } } })` for Claude and an API key for Codex.
 - **Security**: code running in the container can read the synced credentials. Use only with trusted repositories.
 - **MCP OAuth logins** travel only when they live in files:
 
@@ -92,7 +101,7 @@ flowchart LR
   | Codex native OAuth, file store `~/.codex/.credentials.json` (Linux without a keyring) | yes |
   | Codex native OAuth in macOS Keychain / Linux secret service | no: wtc never reads these (Keychain prompts). Proxy that server through `mcp-remote` (`command = "npx"`, `args = ["-y", "mcp-remote@latest", "<url>"]`) or set `mcp_oauth_credentials_store = "file"` and log in again |
 
-- **Keychain (macOS)**: only the `Claude Code-credentials` item is read. If macOS asks, choose *Always Allow*. A `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` in `agents.claude.env` skips the read entirely. Linux hosts read `~/.claude/.credentials.json` directly.
+- **Keychain (macOS)**: only the `Claude Code-credentials` item is read (`Claude Code-credentials-<hash>` for a `configDir`). If macOS asks, choose *Always Allow*. A `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` in the agent's `env` skips the read entirely. Linux hosts read `~/.claude/.credentials.json` directly.
 - **Limits**: plugin / marketplace updates only work on the host (no `.git` in the container); stdio MCP servers need their runtime in the image; MCP servers pointing at host-only paths (home dir, `/Applications`, `.app` bundles, `/snap`, `/nix`, …) are dropped.
 
 ## SOCKS exposure

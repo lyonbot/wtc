@@ -28,7 +28,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc run <name> <script> [-- args]` - manifest script in the container; exits with its exit code.
 - `wtc check <name> [--json]` - run health checks now.
 - `wtc shell <name>` - interactive shell (needs a TTY; exits with the shell's code).
-- `wtc agent <name> <claude|codex> [-- args]` - run Claude Code / Codex in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<kind>`.
+- `wtc agent <name> <agent> [-- args]` - run Claude Code (`claude`), Codex (`codex`) or a custom agent defined under manifest `agents` in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<agent>`.
 - `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state.
@@ -91,8 +91,9 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `PREREMOVE_REJECTED` | `preRemove` exited non-zero (e.g. unpushed work) | resolve the issue, or `rm --force` (loses work) |
 | `RM_NEEDS_RUNNING` | `preRemove` needs a running container | `wtc start <name>` then `rm`, or `rm --force` |
 | `AGENT_NO_CREDENTIALS` | the host has no Claude / Codex login | log in on the host (`claude`, `codex login`) |
-| `AGENT_ENV_MISSING` | an `agents.<kind>.env` `fromHost` variable is unset on the host | export it on the host |
-| `AGENT_INSTALL_FAILED` | auto-install failed, or the agent and npm are both missing | check container network; preinstall the agent in the image |
+| `AGENT_UNKNOWN` | the agent name is not defined in manifest `agents` | use `claude`, `codex` or a name the message lists |
+| `AGENT_ENV_MISSING` | an `agents.<agent>.env` `fromHost` variable is unset on the host | export it on the host |
+| `AGENT_INSTALL_FAILED` | auto-install failed, the agent and npm are both missing, or a custom agent has no `pkg` | check container network; preinstall the agent in the image |
 | `AGENT_IMAGE_UNSUPPORTED` | the image lacks bash / tar | add them to the image |
 | `AGENT_SYNC_FAILED` | copying the agent config into the container failed | read the message; check disk space / `$HOME` permissions |
 

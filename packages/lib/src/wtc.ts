@@ -16,7 +16,6 @@ import { DockerCliRuntime } from "./runtime/docker-cli";
 import type { Runtime } from "./runtime/types";
 import { computeImageHash } from "./setup/image-hash";
 import { type LoadedSetup, loadSetup } from "./setup/load";
-import type { AgentKind } from "./setup/schema";
 
 type Fn<K extends keyof typeof inst> = (typeof inst)[K] extends (ctx: InstanceContext, ...a: infer A) => infer R ? (...a: A) => R : never;
 
@@ -34,7 +33,8 @@ export interface Wtc {
   run(name: string, script: string, args: string[]): Promise<number>;
   check(name: string): Promise<{ health: Health; items: CheckResult[] }>;
   shell(name: string): Promise<number>;
-  agent(name: string, kind: AgentKind, args: string[]): Promise<number>;
+  /** `agent`: a key of the manifest `agents` (built-in claude / codex or a custom definition) */
+  agent(name: string, agent: string, args: string[]): Promise<number>;
   logs(name: string, o?: { follow?: boolean; boot?: string; signal?: AbortSignal }): AsyncIterable<string>;
   tunnel(name: string): ReturnType<typeof tunnel>;
   open(name: string, editor?: "code" | "cursor"): ReturnType<typeof open>;

@@ -1,7 +1,11 @@
 import { homedir } from "node:os";
 import { z } from "zod";
+import { defineClaudeAgent } from "../agent/claude";
+import { defineCodexAgent } from "../agent/codex";
+import { type AgentDefinition, isAgentDefinition } from "../agent/define";
 import { ID_RE } from "../naming";
 
+const expandHome = (s: string) => (s === "~" || s.startsWith("~/") ? homedir() + s.slice(1) : s);
 const id = z.string().regex(ID_RE, "must match ^[a-z0-9]+(-[a-z0-9]+)*$");
 const port = z.number().int().min(1).max(65535);
 const readonly = z.boolean().optional();
@@ -12,7 +16,7 @@ const mount = z.union([
   z.object({ type: z.literal("volume"), external: z.string().min(1), target, readonly }).strict(),
   z.object({
     type: z.literal("bind"),
-    source: z.string().min(1).transform((s) => (s === "~" || s.startsWith("~/") ? homedir() + s.slice(1) : s)),
+    source: z.string().min(1).transform(expandHome),
     target,
     readonly,
   }).strict(),
@@ -28,11 +32,39 @@ const param = z.object({
 });
 
 const envKey = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "env key must match ^[A-Z_][A-Z0-9_]*$");
-const agent = z.object({
-  env: z.record(envKey, z.union([z.string(), z.object({ fromHost: z.string().min(1) }).strict(), z.null()])).default({}),
-  args: z.array(z.string()).default([]),
+const envSpec = z.record(envKey, z.union([z.string(), z.object({ fromHost: z.string().min(1) }).strict(), z.null()]));
+const cmdName = z.string().regex(/^[A-Za-z0-9._+-]+$/, "must be a plain command name");
+const fn = z.custom<(...a: any[]) => any>((f) => typeof f === "function", "must be a function");
+const agentDef = z.object({
+  bin: cmdName,
+  pkg: z.string().min(1).optional(),
   version: z.string().min(1).default("latest"),
-}).strict().default({});
+  env: envSpec.default({}),
+  args: z.union([z.array(z.string()), fn]).default([]),
+  probe: z.array(cmdName).default([]),
+  sync: fn.optional(),
+  afterSync: fn.optional(),
+}).strict();
+const BUILTIN_AGENTS = { claude: defineClaudeAgent, codex: defineCodexAgent } as const;
+
+/** built-ins are always present; anything given must come from defineAgent / defineClaudeAgent / defineCodexAgent */
+const agents = z.record(id, z.custom<AgentDefinition>()).default({}).transform((r, ctx) => {
+  const out: Record<string, AgentDefinition> = {};
+  for (const [k, v] of Object.entries({ claude: BUILTIN_AGENTS.claude(), codex: BUILTIN_AGENTS.codex(), ...r })) {
+    if (!isAgentDefinition(v)) {
+      const hint = k === "claude" ? "defineClaudeAgent({ … })" : k === "codex" ? "defineCodexAgent({ … })" : "defineAgent / defineClaudeAgent / defineCodexAgent";
+      ctx.addIssue({ code: "custom", path: [k], message: `agents must be built with ${hint}` });
+      continue;
+    }
+    const p = agentDef.safeParse(v);
+    if (!p.success) {
+      for (const i of p.error.issues) ctx.addIssue({ ...i, path: [k, ...i.path] });
+      continue;
+    }
+    out[k] = p.data as AgentDefinition;
+  }
+  return out;
+});
 
 export const manifestSchema = z.object({
   id,
@@ -55,7 +87,7 @@ export const manifestSchema = z.object({
   preRemove: z.string().optional(),
   readyTimeout: z.number().positive().default(900),
   ssh: z.object({ knownHosts: z.array(z.string()).default([]) }).default({}),
-  agents: z.object({ claude: agent, codex: agent }).strict().default({}),
+  agents,
 }).superRefine((m, ctx) => {
   if (m.hostForwards.includes(m.socksPort))
     ctx.addIssue({ code: "custom", path: ["socksPort"], message: "socksPort must not appear in hostForwards" });
@@ -85,18 +117,8 @@ export interface Manifest {
   preRemove?: string;
   readyTimeout: number;
   ssh: { knownHosts: string[] };
-  agents: Record<AgentKind, AgentConfig>;
-}
-
-export type AgentKind = "claude" | "codex";
-/** Per-agent options for `wtc agent`; applied at launch only (never part of the container spec). */
-export interface AgentConfig {
-  /** string = literal, `fromHost` = read from the host env at launch, null = drop a built-in variable */
-  env: Record<string, string | { fromHost: string } | null>;
-  /** appended after the built-in args, before CLI args */
-  args: string[];
-  /** npm version / dist-tag used when auto-installing */
-  version: string;
+  /** `wtc agent` targets; always contains the built-ins `claude` and `codex`. Applied at launch only (never part of the container spec). */
+  agents: Record<string, AgentDefinition>;
 }
 
 export type ManifestInput = z.input<typeof manifestSchema>;

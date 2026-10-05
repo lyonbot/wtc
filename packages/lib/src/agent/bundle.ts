@@ -22,6 +22,11 @@ export class Bundle {
     return this.files.has(path);
   }
 
+  /** Copy every file (and its mode) of `other` in, replacing same paths. */
+  merge(other: Bundle) {
+    for (const [p, d] of other.files) this.add(p, d, other.modes.get(p));
+  }
+
   /** Tar bytes; includes the modes list at `.wtc-agent/modes`. */
   async tar(): Promise<Uint8Array> {
     const entries: Record<string, Uint8Array> = Object.fromEntries(this.files);

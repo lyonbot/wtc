@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { defineClaudeAgent } from "../../src/agent/claude";
+import { defineAgent } from "../../src/agent/define";
 import { manifestSchema } from "../../src/setup/schema";
 
 const ok = (o: object) => manifestSchema.parse({ id: "basic", ...o });
@@ -22,20 +24,33 @@ describe("manifest schema", () => {
       mounts: [],
       readyTimeout: 900,
       ssh: { knownHosts: [] },
-      agents: {
-        claude: { env: {}, args: [], version: "latest" },
-        codex: { env: {}, args: [], version: "latest" },
-      },
+      agents: { claude: expect.objectContaining({ bin: "claude" }), codex: expect.objectContaining({ bin: "codex" }) },
     });
   });
-  test("agents: env literal / fromHost / null, args, version; strict", () => {
-    const m = ok({ agents: { claude: { env: { A: "1", B: { fromHost: "X" }, C: null }, args: ["--model", "opus"], version: "2.1.0" } } });
-    expect(m.agents.claude).toEqual({ env: { A: "1", B: { fromHost: "X" }, C: null }, args: ["--model", "opus"], version: "2.1.0" });
-    expect(m.agents.codex).toEqual({ env: {}, args: [], version: "latest" });
+  test("agents: built-in overrides (env literal / fromHost / null, args, version); plain objects rejected", () => {
+    const m = ok({ agents: { claude: defineClaudeAgent({ env: { A: "1", B: { fromHost: "X" }, IS_SANDBOX: null }, args: ["--model", "opus"], version: "2.1.0" }) } });
+    expect(m.agents.claude).toMatchObject({
+      bin: "claude", pkg: "@anthropic-ai/claude-code", version: "2.1.0",
+      env: { A: "1", B: { fromHost: "X" }, DISABLE_AUTOUPDATER: "1" },
+      args: ["--dangerously-skip-permissions", "--model", "opus"],
+    });
+    expect(m.agents.claude!.env).not.toHaveProperty("IS_SANDBOX");
+    expect(m.agents.codex).toMatchObject({ bin: "codex", pkg: "@openai/codex", version: "latest" });
+    expect(() => ok({ agents: { claude: { env: {} } } })).toThrow("defineClaudeAgent");
     bad({ agents: { gemini: {} } });
-    bad({ agents: { claude: { env: { lower: "x" } } } });
-    bad({ agents: { claude: { env: { A: { fromHost: "" } } } } });
-    bad({ agents: { claude: { extra: 1 } } });
+    bad({ agents: { gemini: { bin: "gemini" } } });
+    bad({ agents: { claude: defineClaudeAgent({ env: { lower: "x" } }) } });
+    bad({ agents: { claude: defineClaudeAgent({ env: { A: { fromHost: "" } } }) } });
+  });
+  test("agents: definitions validated, defaults applied, functions kept", () => {
+    const sync = () => {};
+    const m = ok({ agents: { gemini: defineAgent({ bin: "gemini", pkg: "@google/gemini-cli", sync }), cc: defineClaudeAgent({ bin: "claude-x" }) } });
+    expect(m.agents.gemini).toEqual({ bin: "gemini", pkg: "@google/gemini-cli", version: "latest", env: {}, args: [], probe: [], sync });
+    expect(m.agents.cc).toMatchObject({ bin: "claude-x", pkg: undefined });
+    bad({ agents: { gemini: defineAgent({ bin: "a b" }) } });
+    bad({ agents: { gemini: defineAgent({ bin: "g", extra: 1 } as never) } });
+    bad({ agents: { gemini: defineAgent({ bin: "g", sync: "nope" } as never) } });
+    bad({ agents: { Bad: defineAgent({ bin: "g" }) } });
   });
   test("check timeout default", () => {
     expect(ok({ checks: { web: { run: "true" } } }).checks.web!.timeout).toBe(10);

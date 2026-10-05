@@ -61,14 +61,14 @@ describe("cli in-process", () => {
     expect(c.args[1]).toEqual(["bash", "-lc", 'x "$@"', "s", "-x"]);
   });
 
-  test("agent: validates kind (exit 2), passes args after -- and the exit code through", async () => {
+  test("agent: passes the agent name, args after -- and the exit code through", async () => {
     const { load } = await withInstance();
     const w = await load();
     let got: unknown[] = [];
     w.agent = async (...a) => { got = a; return 5; };
-    const bad = await capture(() => runCli(["bun", "wtc", "agent", "a", "gemini"], load));
-    expect(bad.code).toBe(2);
-    expect(bad.err).toContain("claude, codex");
+    const custom = await capture(() => runCli(["bun", "wtc", "agent", "a", "claude-custom"], load));
+    expect(custom.code).toBe(5);
+    expect(got).toEqual(["a", "claude-custom", []]);
     const r = await capture(() => runCli(["bun", "wtc", "agent", "a", "codex", "--", "exec", "-m", "x", "--json"], load));
     expect(r.code).toBe(5);
     expect(got).toEqual(["a", "codex", ["exec", "-m", "x", "--json"]]);

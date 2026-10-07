@@ -30,19 +30,29 @@ flowchart LR
   B -->|exit != 0 / timeout| F[failed, container stays up]
 ```
 
+## Per-instance config: `container`
+
+`mounts`, `hostForwards`, `env` and `annotations` live under `container`. They are fixed when the instance is created, so they come either from a static object or from **one function** (no merging of two sources); typical use is a config that depends on `wtc up --set K=V`.
+
+- Types and JSDoc: `ContainerConfig`, `ContainerFn` in [packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts); evaluation and validation in [packages/wtc/src/instance/container.ts](../packages/wtc/src/instance/container.ts).
+- The function gets `{ name, params, setupDir }`, may be async, and runs **once, at create** (`start` / `restart` never re-evaluate). Throwing -> `HOOK_FAILED`; a bad result (schema, duplicate mount `target`, `hostForwards` containing `socksPort`, `env` key that is a param or starts with `WTC_`, missing bind source) -> `INVALID_MANIFEST`.
+- **Snapshot**: what was actually used is saved to `<setup>/.wtc/run/<name>/config.json` (`/wtc/run/config.json` in the container): `{ params, container, spec }`, with `spec` the docker-level container spec (socks password redacted). `annotations` is free-form string metadata for your own tooling; wtc never interprets it.
+
 ## Host-side hooks
 
-`hooks` in the manifest are TS functions that run **on the host** (container-side logic stays in `init.sh` / `preRemove`). Contract and payload types are in the JSDoc of `SetupHooks` ([packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts)); the call sites are in [packages/wtc/src/instance/instance.ts](../packages/wtc/src/instance/instance.ts).
+`hooks` are TS functions that run **on the host** (container-side logic stays in `init.sh` / `preRemove`). Contract and payload types are in the JSDoc of `SetupHooks` ([packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts)); call sites are in [packages/wtc/src/instance/instance.ts](../packages/wtc/src/instance/instance.ts).
 
-- **`preBoot({ name, event, setupDir })`**: before a container is created or (re)started, i.e. before `init.sh` runs. Use it for e.g. refreshing host checkouts that `init.sh` clones from (see "faster clones" below). Failing it aborts the boot (`HOOK_FAILED`); `try/catch` inside to make it best-effort.
+- **`preBoot({ name, event, setupDir, config })`**: before a container is created or (re)started, i.e. before `init.sh` runs. `config` is the config snapshot: freshly resolved on create, the saved `config.json` on start/restart. Use it e.g. to refresh host checkouts that `init.sh` clones from (see "faster clones" below) or to create bind-source dirs. Failing it aborts the boot (`HOOK_FAILED`); `try/catch` inside to make it best-effort.
 - **No top-level side effects in `wtc.setup.ts`**: it is imported by every command (`ls`, `status`, ...). Do not branch on `process.argv`; use a hook.
 
 ```mermaid
 flowchart LR
   U[up / start / restart] --> H{needs a boot?}
   H -- no (ready, running) --> X[no hook]
-  H -- yes --> P[hooks.preBoot] -->|throws| F[HOOK_FAILED, nothing started]
-  P --> B[create/start container] --> I[init.sh]
+  H -- create --> C[container fn] --> P
+  H -- start/restart --> S[saved config.json] --> P[hooks.preBoot]
+  P -->|throws| F[HOOK_FAILED, nothing started]
+  P --> B[bind check, create/start container, write config.json] --> I[init.sh]
 ```
 
 ## Image requirements
@@ -81,7 +91,7 @@ Not used by the example. An `init.sh` clone can borrow objects from an existing 
   - List git hosts in `ssh.knownHosts`; entries are copied from the host's `~/.ssh/known_hosts`. A missing entry is a warning and the host is skipped: `ssh` to it once on the host first.
   - Alternative without an agent: `bind` a key file read-only to a side path, copy it to `~/.ssh` with mode 600 in `init.sh`, and set `GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes"`.
 - **Params** are injected as plain env vars: do not put secrets there.
-- **`hostForwards`**: container `127.0.0.1:<p>` reaches host `<p>`. On Linux the host service must listen on docker0 or `0.0.0.0`.
+- **`container.hostForwards`**: container `127.0.0.1:<p>` reaches host `<p>`. On Linux the host service must listen on docker0 or `0.0.0.0`.
 
 ## Coding agents (`wtc agent`)
 

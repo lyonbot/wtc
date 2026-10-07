@@ -28,19 +28,6 @@ describe("loadSetup", () => {
     const e = await code(loadSetup(mk("inv", `export default { id: "Bad" };`)));
     expect(e?.code).toBe("INVALID_MANIFEST");
   });
-  test("bind source must exist", async () => {
-    const d = mk("nobind", `export default { id: "x", mounts: [{ type: "bind", source: "/definitely/not/here", target: "/d" }] };`);
-    expect((await code(loadSetup(d)))?.code).toBe("INVALID_MANIFEST");
-    const ok = mk("okbind", `export default { id: "x", mounts: [{ type: "bind", source: "${tmp}", target: "/d" }] };`);
-    expect((await loadSetup(ok)).manifest.mounts.length).toBe(1);
-  });
-  test("relative bind source resolves against setup dir, not cwd", async () => {
-    const d = mk("relbind", `export default { id: "x", mounts: [{ type: "bind", source: "data", target: "/d" }] };`);
-    expect((await code(loadSetup(d)))?.code).toBe("INVALID_MANIFEST");
-    mkdirSync(join(d, "data"));
-    const s = await loadSetup(d);
-    expect((s.manifest.mounts[0] as { source: string }).source).toBe(join(d, "data"));
-  });
   test("missing file -> SETUP_NOT_FOUND", async () => {
     expect((await code(loadSetup(join(tmp, "none"))))?.code).toBe("SETUP_NOT_FOUND");
   });

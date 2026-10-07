@@ -2,24 +2,28 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { buildCreateSpec } from "../../src/instance/create-spec";
 import type { PlatformInfo } from "../../src/runtime/types";
+import { manifestContainerSchema } from "../../src/setup/schema";
 import { mkCtx } from "./helpers";
+
+const C = (c: Parameters<typeof manifestContainerSchema.parse>[0] = {}) => manifestContainerSchema.parse(c);
 
 const cleanups: (() => void)[] = [];
 afterAll(() => cleanups.forEach((c) => c()));
 const linux: PlatformInfo = { kind: "linux", arch: "amd64", hostGatewayFlag: true, sshAgentSource: "/tmp/agent.sock" };
 
-function build(m: Parameters<typeof mkCtx>[0] = {}, platform: PlatformInfo = linux, params: Record<string, string> = { BRANCH: "main" }) {
+function build(m: Parameters<typeof mkCtx>[0] = {}, platform: PlatformInfo = linux, params: Record<string, string> = { BRANCH: "main" }, container: Parameters<typeof C>[0] = {}) {
   const t = mkCtx(m);
   cleanups.push(t.cleanup);
-  const spec = buildCreateSpec({ ctx: t.ctx, name: "feat-a", imageRef: "wtc-demo:abc", params, socksHostPort: 21080, socksBind: "0.0.0.0", platform });
+  const spec = buildCreateSpec({ ctx: t.ctx, name: "feat-a", imageRef: "wtc-demo:abc", params, container: C(container), socksHostPort: 21080, socksBind: "0.0.0.0", platform });
   return { ...t, spec };
 }
 
 describe("buildCreateSpec", () => {
   test("env = params + WTC_*", () => {
-    const { spec } = build({ hostForwards: [3306, 6379], readyTimeout: 120, init: "boot.sh", cwd: "/src" });
+    const { spec } = build({ readyTimeout: 120, init: "boot.sh", cwd: "/src" }, linux, undefined, { hostForwards: [3306, 6379], env: { FOO: "bar" } });
     expect(spec.env).toEqual({
       BRANCH: "main",
+      FOO: "bar",
       WTC_SETUP_ID: "demo",
       WTC_NAME: "feat-a",
       WTC_CWD: "/src",
@@ -42,7 +46,7 @@ describe("buildCreateSpec", () => {
     expect(spec.entrypoint).toEqual(["/wtc/bin/wtc-entry"]);
   });
   test("mounts per §6.1 plus manifest mounts", () => {
-    const { spec, dir, home, ctx } = build({
+    const { spec, dir, home, ctx } = build({}, linux, undefined, {
       mounts: [
         { type: "volume", name: "m2", target: "/root/.m2", scope: "setup" },
         { type: "volume", name: "pg", target: "/var/lib/pg", scope: "instance" },
@@ -69,8 +73,8 @@ describe("buildCreateSpec", () => {
   test("~ in bind source expands to ctx.home", () => {
     const t = mkCtx();
     cleanups.push(t.cleanup);
-    t.ctx.setup.manifest.mounts = [{ type: "bind", source: "~/datasets", target: "/d" }];
-    const spec = buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, socksHostPort: 1, socksBind: "127.0.0.1", platform: linux });
+    const spec = buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, container: { mounts: [{ type: "bind", source: "~/datasets", target: "/d" }], hostForwards: [], env: {}, annotations: {} }, // unparsed: ~ is resolved against ctx.home here
+      socksHostPort: 1, socksBind: "127.0.0.1", platform: linux });
     expect(spec.mounts.find((m) => m.target === "/d")!.source).toBe(join(t.home, "datasets"));
   });
   test("ssh-agent mount only when platform.sshAgentSource; extraHosts only with hostGatewayFlag", () => {
@@ -80,20 +84,20 @@ describe("buildCreateSpec", () => {
     expect(build().spec.extraHosts).toEqual(["host.docker.internal:host-gateway"]);
   });
   test("bind sources outside bindableRoots -> BIND_NOT_SHARED listing the path", () => {
-    const t = mkCtx({ mounts: [{ type: "bind", source: "/opt/elsewhere", target: "/e" }] });
+    const t = mkCtx();
+    const bound = C({ mounts: [{ type: "bind", source: "/opt/elsewhere", target: "/e" }] });
     cleanups.push(t.cleanup);
     const colima: PlatformInfo = { kind: "colima", arch: "arm64", hostGatewayFlag: false, sshAgentSource: "/run/host-services/ssh-auth.sock", bindableRoots: [t.home] };
     let e: { code: string; message: string } | undefined;
     try {
-      buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, socksHostPort: 1, socksBind: "0.0.0.0", platform: colima });
+      buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, container: bound, socksHostPort: 1, socksBind: "0.0.0.0", platform: colima });
     } catch (x) { e = x as typeof e; }
     expect(e?.code).toBe("BIND_NOT_SHARED");
     expect(e?.message).toContain("/opt/elsewhere");
     expect(e?.message).toContain(t.dir); // setup dir (tmpdir) is outside home too
     expect(e?.message).not.toContain("ssh-auth.sock"); // agent socket lives in the VM, exempt
     // all under home -> ok
-    t.ctx.setup.manifest.mounts = [];
     t.ctx.setup.dir = join(t.home, "setup");
-    expect(() => buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, socksHostPort: 1, socksBind: "0.0.0.0", platform: colima })).not.toThrow();
+    expect(() => buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, container: C(), socksHostPort: 1, socksBind: "0.0.0.0", platform: colima })).not.toThrow();
   });
 });

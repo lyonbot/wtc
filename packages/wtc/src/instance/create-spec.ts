@@ -3,13 +3,14 @@ import { WtcError } from "../errors";
 import { containerName, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
 import type { CreateSpec, PlatformInfo, RuntimeMount } from "../runtime/types";
 import { PROTOCOL_VERSION } from "../version";
+import type { ContainerConfig } from "../setup/schema";
 import type { InstanceContext } from "./instance";
 
 /** Host-side state paths of one instance (spec §5 layout). */
 export function instancePaths(setupDir: string, name: string) {
   const run = join(setupDir, ".wtc", "run", name);
   const log = join(setupDir, ".wtc", "log", name);
-  return { run, log, ssh: join(run, "ssh"), status: join(run, "status.json"), create: join(run, "create.json") };
+  return { run, log, ssh: join(run, "ssh"), status: join(run, "status.json"), create: join(run, "create.json"), config: join(run, "config.json") };
 }
 
 /** `~` → home; relative → against the setup dir. */
@@ -34,6 +35,7 @@ export function buildCreateSpec(o: {
   name: string;
   imageRef: string;
   params: Record<string, string>;
+  container: ContainerConfig;
   socksHostPort: number;
   socksBind: string;
   platform: PlatformInfo;
@@ -45,13 +47,14 @@ export function buildCreateSpec(o: {
 
   const env: Record<string, string> = {
     ...o.params,
+    ...o.container.env,
     WTC_SETUP_ID: id,
     WTC_NAME: o.name,
     WTC_CWD: m.cwd,
     WTC_INIT: m.init,
     WTC_READY_TIMEOUT: String(m.readyTimeout),
     WTC_SOCKS_PORT: String(m.socksPort),
-    WTC_HOST_FORWARDS: m.hostForwards.join(","),
+    WTC_HOST_FORWARDS: o.container.hostForwards.join(","),
   };
   if (m.socksAuth) {
     env.WTC_SOCKS_USER = m.socksAuth.user;
@@ -66,7 +69,7 @@ export function buildCreateSpec(o: {
     { type: "bind", source: p.run, target: "/wtc/run" },
     { type: "bind", source: p.log, target: "/wtc/log" },
   ];
-  for (const mt of m.mounts) {
+  for (const mt of o.container.mounts) {
     const ro = mt.readonly ? { readonly: true } : {};
     if (mt.type === "bind") mounts.push({ type: "bind", source: resolveBindSource(mt.source, setup.dir, home), target: mt.target, ...ro });
     else if ("external" in mt) mounts.push({ type: "volume", source: mt.external, target: mt.target, ...ro });

@@ -49,11 +49,11 @@ describe("up (absent)", () => {
   test("builds, creates volumes, ssh dir, run/log dirs, create.json, creates and starts", async () => {
     const t = setup({
       params: { BRANCH: { description: "b", default: "main" } },
-      mounts: [
+      container: { mounts: [
         { type: "volume", name: "m2", target: "/m2", scope: "setup" },
         { type: "volume", name: "pg", target: "/pg", scope: "instance" },
         { type: "volume", external: "ext", target: "/ext" },
-      ],
+      ] },
     });
     const ev = await collect(up(t.ctx, "a", { wait: false }));
     expect(actions(ev)).toEqual(["build", "create", "start"]);
@@ -88,7 +88,7 @@ describe("up (absent)", () => {
   });
 
   test("existing image and volumes are reused", async () => {
-    const t = setup({ mounts: [{ type: "volume", name: "m2", target: "/m2", scope: "setup" }] });
+    const t = setup({ container: { mounts: [{ type: "volume", name: "m2", target: "/m2", scope: "setup" }] } });
     const hash = await computeImageHash(t.ctx.setup);
     t.rt.images.push({ ref: `wtc-demo:${hash}`, id: "x" });
     t.rt.volumes.set("wtc-demo.pnpm", { "wtc.setup": "demo", keep: "1" });
@@ -258,10 +258,10 @@ describe("rm", () => {
   async function readyWithVolumes(m: Parameters<typeof mkCtx>[0] = {}) {
     const t = setup({
       ...m,
-      mounts: [
+      container: { mounts: [
         { type: "volume", name: "m2", target: "/m2", scope: "setup" },
         { type: "volume", name: "pg", target: "/pg", scope: "instance" },
-      ],
+      ] },
     });
     await created(t);
     writeStatus(t, "a", "ready");
@@ -415,7 +415,7 @@ describe("ls / status", () => {
 
 describe("carried-over fixes (task 7)", () => {
   test("new instance: bind sources validated before build/volume creation", async () => {
-    const t = setup({ mounts: [{ type: "bind", source: "/somewhere/else", target: "/x" }] as never });
+    const t = setup({ container: { mounts: [{ type: "bind", source: "/somewhere/else", target: "/x" }] } });
     t.rt.platformInfo = { kind: "colima", arch: "arm64", hostGatewayFlag: false, bindableRoots: [t.home] };
     const e = await err(collect(up(t.ctx, "a", { wait: false })));
     expect(e?.code).toBe("BIND_NOT_SHARED");
@@ -431,7 +431,7 @@ describe("carried-over fixes (task 7)", () => {
 
 describe("hooks.preBoot", () => {
   const withHook = () => {
-    const calls: { name: string; event: string; setupDir: string }[] = [];
+    const calls: { name: string; event: string; setupDir: string; config?: unknown }[] = [];
     const t = setup({ hooks: { preBoot: (c) => void calls.push(c) } });
     return { t, calls };
   };
@@ -439,7 +439,7 @@ describe("hooks.preBoot", () => {
   test("fires on up (create) and on up of a stopped instance, with event up", async () => {
     const { t, calls } = withHook();
     await created(t);
-    expect(calls).toEqual([{ name: "a", event: "up", setupDir: t.dir }]);
+    expect(calls).toMatchObject([{ name: "a", event: "up", setupDir: t.dir }]);
     await t.rt.stop(C("a"));
     await collect(up(t.ctx, "a", { wait: false }));
     expect(calls.map((c) => c.event)).toEqual(["up", "up"]);
@@ -481,5 +481,83 @@ describe("hooks.preBoot", () => {
     expect(e?.code).toBe("HOOK_FAILED");
     expect(e?.message).toContain("boom");
     expect(t2.rt.containers.has(C("a"))).toBe(false);
+  });
+});
+
+describe("container (function form)", () => {
+  const params = { MODE: { description: "m", default: "a" } };
+
+  test("called once at create with { name, params, setupDir }; result drives spec; start/restart do not call it", async () => {
+    const calls: unknown[] = [];
+    const t = setup({
+      params,
+      container: (c) => {
+        calls.push(c);
+        return { mounts: [{ type: "volume", external: "ext", target: "/ext" }], hostForwards: [5432], env: { FOO: c.params.MODE! } };
+      },
+    });
+    await collect(up(t.ctx, "a", { wait: false, set: { MODE: "b" } }));
+    expect(calls).toEqual([{ name: "a", params: { MODE: "b" }, setupDir: t.dir }]);
+    const spec = t.rt.containers.get(C("a"))!.spec;
+    expect(spec.env).toMatchObject({ FOO: "b", MODE: "b", WTC_HOST_FORWARDS: "5432" });
+    expect(spec.mounts.some((m) => m.target === "/ext")).toBe(true);
+    await stop(t.ctx, "a");
+    await start(t.ctx, "a");
+    await restart(t.ctx, "a");
+    expect(calls.length).toBe(1);
+  });
+
+  test("snapshot config.json: params, container config, redacted spec, socks password redacted", async () => {
+    const t = setup({ socksAuth: { user: "u", pass: "secret" }, container: () => ({ env: { FOO: "1" } }) });
+    await created(t);
+    const raw = readFileSync(join(runDir(t, "a"), "config.json"), "utf8");
+    expect(raw).not.toContain("secret");
+    const snap = JSON.parse(raw);
+    expect(snap.spec.env).toMatchObject({ FOO: "1", WTC_SOCKS_USER: "u", WTC_SOCKS_PASS: "<redacted>" });
+    expect(snap.spec.name).toBe(C("a"));
+    expect(snap.container).toEqual({ mounts: [], hostForwards: [], env: { FOO: "1" }, annotations: {} });
+  });
+
+  test("container() is evaluated first; preBoot gets the config on create and the saved snapshot on start/restart", async () => {
+    const order: string[] = [];
+    let n = 0;
+    const seen: { event: string; config: { params: Record<string, string>; container: { env: Record<string, string>; annotations: Record<string, string> } } }[] = [];
+    const t = setup({
+      params,
+      hooks: { preBoot: (c) => void (order.push("preBoot"), seen.push({ event: c.event, config: c.config as never })) },
+      container: async (c) => { order.push("container"); return { env: { N: String(++n) }, annotations: { branch: c.params.MODE! } }; },
+    });
+    await collect(up(t.ctx, "a", { wait: false, set: { MODE: "b" } }));
+    expect(order).toEqual(["container", "preBoot"]);
+    await stop(t.ctx, "a");
+    await start(t.ctx, "a");
+    await restart(t.ctx, "a");
+    expect(n).toBe(1); // container() not re-evaluated
+    expect(seen.map((x) => x.event)).toEqual(["up", "start", "restart"]);
+    for (const x of seen) expect(x.config).toMatchObject({ params: { MODE: "b" }, container: { env: { N: "1" }, annotations: { branch: "b" } } });
+  });
+
+  test("throw -> HOOK_FAILED, nothing created", async () => {
+    const t = setup({ container: () => { throw new Error("boom"); } });
+    const e = await err(collect(up(t.ctx, "a", { wait: false })));
+    expect(e?.code).toBe("HOOK_FAILED");
+    expect(e?.message).toContain("boom");
+    expect(t.rt.containers.has(C("a"))).toBe(false);
+    expect(ops(t)).not.toContain("build");
+  });
+
+  test("invalid result / env-param collision / missing bind source / socksPort forward -> INVALID_MANIFEST", async () => {
+    const bad = async (container: never, p: Record<string, unknown> = {}) => {
+      const t = setup({ container, ...p });
+      const e = await err(collect(up(t.ctx, "a", { wait: false })));
+      expect(e?.code).toBe("INVALID_MANIFEST");
+      expect(t.rt.containers.has(C("a"))).toBe(false);
+      return e!.message;
+    };
+    await bad((() => ({ extra: 1 })) as never);
+    expect(await bad((() => ({ env: { MODE: "x" } })) as never, { params })).toContain("also a param");
+    expect(await bad((() => ({ mounts: [{ type: "bind", source: "/definitely/not/here", target: "/d" }] })) as never)).toContain("does not exist");
+    expect(await bad((() => ({ hostForwards: [1080] })) as never)).toContain("socksPort");
+    expect(await bad((() => ({ mounts: [{ type: "volume", external: "a", target: "/d" }, { type: "volume", external: "b", target: "/d" }] })) as never)).toContain("duplicate mount target");
   });
 });

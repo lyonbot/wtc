@@ -5,9 +5,10 @@ import { assertId, containerName, imageRef, instanceVolume, LABEL, pnpmVolume, s
 import type { ContainerInfo, Runtime } from "../runtime/types";
 import { computeImageHash } from "../setup/image-hash";
 import type { LoadedSetup } from "../setup/load";
-import type { BootEvent } from "../setup/schema";
+import type { BootEvent, ConfigSnapshot } from "../setup/schema";
 import { type InstanceState, mergeState, readStatus } from "../status/status";
 import { build, hasImage } from "../ops/build";
+import { assertBindSourcesExist, resolveContainer } from "./container";
 import { assertBindable, buildCreateSpec, instancePaths, resolveBindSource } from "./create-spec";
 import { assertKnownParams, diffParams, resolveParams } from "./params";
 import { allocateSocksPort } from "./ports";
@@ -54,6 +55,15 @@ export interface CreateRecord {
 
 const MAX_PORT_ATTEMPTS = 5;
 const LOG_TAIL = 50;
+
+async function readConfig(file: string): Promise<ConfigSnapshot | null> {
+  try {
+    const { params, container } = JSON.parse(await readFile(file, "utf8")) as ConfigSnapshot;
+    return { params, container };
+  } catch {
+    return null;
+  }
+}
 
 async function readCreate(file: string): Promise<CreateRecord | null> {
   try {
@@ -145,12 +155,15 @@ async function* createInstance(
   const p = instancePaths(setup.dir, name);
   const params = resolveParams(m, o.set ?? {});
   const platform = await rt.platform();
+  const cfg = await resolveContainer(ctx, name, params);
+  await preBoot(ctx, name, "up", { params, container: cfg });
 
   // fail fast (before build / volumes): every bind source must be shared with the runtime VM
   assertBindable(
-    [ctx.kitDir, setup.dir, p.ssh, p.run, p.log, ...m.mounts.flatMap((mt) => (mt.type === "bind" ? [resolveBindSource(mt.source, setup.dir, ctx.home)] : []))],
+    [ctx.kitDir, setup.dir, p.ssh, p.run, p.log, ...cfg.mounts.flatMap((mt) => (mt.type === "bind" ? [resolveBindSource(mt.source, setup.dir, ctx.home)] : []))],
     platform.bindableRoots,
   );
+  assertBindSourcesExist(ctx, cfg);
 
   if (!(await hasImage(ctx, ref))) {
     yield { type: "action", action: "build", detail: ref };
@@ -160,7 +173,7 @@ async function* createInstance(
   yield { type: "action", action: "create", detail: container };
   const base = { [LABEL.setup]: id, [LABEL.setupDir]: setup.dir };
   const want: [string, Record<string, string>][] = [[pnpmVolume(id), { ...base, [LABEL.scope]: "setup" }]];
-  for (const mt of m.mounts) {
+  for (const mt of cfg.mounts) {
     if (mt.type !== "volume" || !("scope" in mt)) continue;
     if (mt.scope === "setup") want.push([setupVolume(id, mt.name), { ...base, [LABEL.scope]: "setup" }]);
     else want.push([instanceVolume(id, name, mt.name), { ...base, [LABEL.scope]: "instance", [LABEL.name]: name }]);
@@ -177,7 +190,7 @@ async function* createInstance(
   const exclude = new Set<number>();
   for (let attempt = 1; ; attempt++) {
     const port = o.socksHostPort ?? (await allocateSocksPort(rt, m.socksHostPortRange, exclude));
-    const spec = buildCreateSpec({ ctx, name, imageRef: ref, params, socksHostPort: port, socksBind, platform });
+    const spec = buildCreateSpec({ ctx, name, imageRef: ref, params, container: cfg, socksHostPort: port, socksBind, platform });
     const rec: CreateRecord = { params, socksBind, socksHostPort: port, imageRef: ref, createdAt: ctx.now().toISOString() };
     try {
       await rt.create(spec);
@@ -187,6 +200,8 @@ async function* createInstance(
       throw e;
     }
     await writeFile(p.create, JSON.stringify(rec, null, 2) + "\n"); // only after we own the container
+    const redacted = { ...spec, env: { ...spec.env, ...(spec.env.WTC_SOCKS_PASS ? { WTC_SOCKS_PASS: "<redacted>" } : {}) } };
+    await writeFile(p.config, JSON.stringify({ params, container: cfg, spec: redacted }, null, 2) + "\n"); // snapshot of what was created
     yield { type: "action", action: "start", detail: `socks ${socksBind}:${port}` };
     try {
       await rt.start(container);
@@ -202,14 +217,26 @@ async function* createInstance(
 }
 
 /** Run the manifest's host-side `preBoot` hook; any failure aborts the boot as HOOK_FAILED. */
-async function preBoot(ctx: InstanceContext, name: string, event: BootEvent): Promise<void> {
+async function preBoot(ctx: InstanceContext, name: string, event: BootEvent, config: ConfigSnapshot): Promise<void> {
   const hook = ctx.setup.manifest.hooks.preBoot;
   if (!hook) return;
   try {
-    await hook({ name, event, setupDir: ctx.setup.dir });
+    await hook({ name, event, setupDir: ctx.setup.dir, config });
   } catch (e) {
     throw new WtcError("HOOK_FAILED", `hooks.preBoot failed for ${name} (${event}): ${e instanceof Error ? e.message : String(e)}`, "fix wtc.setup.ts, or catch the error inside the hook to make it best-effort");
   }
+}
+
+/** preBoot for an instance that already exists: hands the hook the saved snapshot (re-resolves only if it is missing). */
+async function preBootExisting(ctx: InstanceContext, name: string, event: BootEvent): Promise<void> {
+  if (!ctx.setup.manifest.hooks.preBoot) return;
+  const p = instancePaths(ctx.setup.dir, name);
+  let config = await readConfig(p.config);
+  if (!config) {
+    const params = (await readCreate(p.create))?.params ?? {};
+    config = { params, container: await resolveContainer(ctx, name, params) };
+  }
+  await preBoot(ctx, name, event, config);
 }
 
 /**
@@ -231,7 +258,6 @@ export async function* up(
 
   const existing = await rt.inspect(container);
   if (!existing) {
-    await preBoot(ctx, name, "up");
     yield* createInstance(ctx, name, o, imageRef(m.id, hash));
   } else {
     assertKnownParams(m, o.set ?? {});
@@ -251,7 +277,7 @@ export async function* up(
       return;
     }
     if (s.state === "stopped") {
-      await preBoot(ctx, name, "up");
+      await preBootExisting(ctx, name, "up");
       yield { type: "action", action: "start" };
       await startExisting(ctx, name, existing);
     }
@@ -290,7 +316,7 @@ export async function* up(
 export async function start(ctx: InstanceContext, name: string): Promise<void> {
   const info = await mustInspect(ctx, name);
   if (isRunning(info)) return;
-  await preBoot(ctx, name, "start");
+  await preBootExisting(ctx, name, "start");
   await startExisting(ctx, name, info);
 }
 
@@ -302,7 +328,7 @@ export async function stop(ctx: InstanceContext, name: string): Promise<void> {
 /** Runtime restart: entry starts a new boot and reruns init. */
 export async function restart(ctx: InstanceContext, name: string): Promise<void> {
   const info = await mustInspect(ctx, name);
-  await preBoot(ctx, name, "restart");
+  await preBootExisting(ctx, name, "restart");
   await ctx.rt.restart(info.name);
 }
 

@@ -14,7 +14,9 @@ export default defineSetup({
   checks: {
     http: { run: "curl -fsS http://127.0.0.1:5173/health" },
   },
-  hostForwards: [16379],
-  mounts: [{ type: "volume", name: "scratch", target: "/scratch", scope: "instance" }],
+  container: {
+    hostForwards: [16379],
+    mounts: [{ type: "volume", name: "scratch", target: "/scratch", scope: "instance" }],
+  },
   preRemove: "test ! -f /workspace/app/.keep",
 });

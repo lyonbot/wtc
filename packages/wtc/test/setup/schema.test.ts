@@ -15,11 +15,9 @@ describe("manifest schema", () => {
       cwd: "/workspace",
       scripts: {},
       checks: {},
-      hostForwards: [],
       socksPort: 1080,
       socksBind: "0.0.0.0",
       socksHostPortRange: [21080, 21179],
-      mounts: [],
       readyTimeout: 900,
       ssh: { knownHosts: [] },
       agents: {
@@ -27,7 +25,17 @@ describe("manifest schema", () => {
         codex: { env: {}, args: [], version: "latest" },
       },
       hooks: {},
+      container: { mounts: [], hostForwards: [], env: {}, annotations: {} },
     });
+  });
+  test("container: static object or function; duplicate mount target / WTC_ env / unknown top-level key rejected", () => {
+    const fn = () => ({});
+    expect(ok({ container: fn }).container).toBe(fn);
+    bad({ container: { mounts: [{ type: "bind", source: "/a", target: "/d" }, { type: "bind", source: "/b", target: "/d" }] } });
+    bad({ container: { env: { WTC_X: "1" } } });
+    bad({ container: { extra: 1 } });
+    bad({ mounts: [] }); // moved into `container`
+    bad({ hostForwards: [1] });
   });
   test("hooks: preBoot must be a function; unknown hook rejected", () => {
     const fn = () => {};
@@ -50,24 +58,24 @@ describe("manifest schema", () => {
   test("id and volume name must match ID_RE", () => {
     bad({ id: "Bad_ID" });
     bad({ id: "a--b" });
-    bad({ mounts: [{ type: "volume", name: "M2", target: "/x", scope: "setup" }] });
-    ok({ mounts: [{ type: "volume", name: "m2", target: "/x", scope: "setup" }] });
+    bad({ container: { mounts: [{ type: "volume", name: "M2", target: "/x", scope: "setup" }] } });
+    ok({ container: { mounts: [{ type: "volume", name: "m2", target: "/x", scope: "setup" }] } });
   });
   test("mount targets must not collide with /wtc or /pnpm", () => {
     for (const target of ["/wtc", "/wtc/bin", "/pnpm", "/pnpm/store"])
-      bad({ mounts: [{ type: "bind", source: "/x", target }] });
-    ok({ mounts: [{ type: "bind", source: "/x", target: "/wtcx" }] });
+      bad({ container: { mounts: [{ type: "bind", source: "/x", target }] } });
+    ok({ container: { mounts: [{ type: "bind", source: "/x", target: "/wtcx" }] } });
   });
   test("bind source expands ~", () => {
-    const m = ok({ mounts: [{ type: "bind", source: "~/d", target: "/d" }] });
-    expect((m.mounts[0] as any).source).toBe(`${require("os").homedir()}/d`);
+    const m = ok({ container: { mounts: [{ type: "bind", source: "~/d", target: "/d" }] } });
+    expect(((m.container as any).mounts[0] as any).source).toBe(`${require("os").homedir()}/d`);
   });
   test("ports", () => {
     bad({ socksPort: 0 });
     bad({ socksPort: 65536 });
-    bad({ hostForwards: [70000] });
-    bad({ hostForwards: [1080] });
-    ok({ socksPort: 1081, hostForwards: [1080] });
+    bad({ container: { hostForwards: [70000] } });
+    bad({ container: { hostForwards: [1080] } });
+    ok({ socksPort: 1081, container: { hostForwards: [1080] } });
     bad({ socksHostPortRange: [300, 200] });
     bad({ socksHostPortRange: [0, 200] });
   });

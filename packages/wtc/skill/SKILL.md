@@ -89,7 +89,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `PORT_IN_USE` | socks host port taken (existing instance) | free the port, or `wtc rm` and re-`up` |
 | `NO_FREE_PORT` | no free port in `socksHostPortRange` | free ports or pass `--socks-host-port` |
 | `PREREMOVE_REJECTED` | `preRemove` exited non-zero (e.g. unpushed work) | resolve the issue, or `rm --force` (loses work) |
-| `HOOK_FAILED` | `hooks.preBoot` in `wtc.setup.ts` threw | fix the hook, or catch inside it to make it best-effort |
+| `HOOK_FAILED` | `hooks.preBoot` or a function-valued `container` in `wtc.setup.ts` threw | fix the hook, or catch inside it to make it best-effort |
 | `RM_NEEDS_RUNNING` | `preRemove` needs a running container | `wtc start <name>` then `rm`, or `rm --force` |
 | `AGENT_NO_CREDENTIALS` | the host has no Claude / Codex login | log in on the host (`claude`, `codex login`) |
 | `AGENT_ENV_MISSING` | an `agents.<kind>.env` `fromHost` variable is unset on the host | export it on the host |

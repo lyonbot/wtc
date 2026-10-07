@@ -101,3 +101,19 @@ describe("buildCreateSpec", () => {
     expect(() => buildCreateSpec({ ctx: t.ctx, name: "a", imageRef: "i", params: {}, container: C(), socksHostPort: 1, socksBind: "0.0.0.0", platform: colima })).not.toThrow();
   });
 });
+
+describe("annotations -> labels", () => {
+  test("mirrored as wtc.ann.<key>; wtc's own labels win", () => {
+    const { spec } = build({}, linux, undefined, { annotations: { branch: "feat/x", "a-b.c": "1" } });
+    expect(spec.labels).toMatchObject({ "wtc.ann.branch": "feat/x", "wtc.ann.a-b.c": "1", "wtc.setup": "demo", "wtc.name": "feat-a" });
+  });
+  test("limits: key charset, 4096 bytes per label, 64 entries -> rejected, not truncated", () => {
+    const parse = (a: Record<string, string>) => manifestContainerSchema.safeParse({ annotations: a }).success;
+    expect(parse({ ok: "x".repeat(4096 - "wtc.ann.ok".length) })).toBe(true);
+    expect(parse({ ok: "x".repeat(4096 - "wtc.ann.ok".length + 1) })).toBe(false);
+    expect(parse({ ok: "é".repeat(2100) })).toBe(false); // bytes, not chars
+    for (const k of ["Upper", "-a", "a-", "a..b", "a_b", "a b", ""]) expect(parse({ [k]: "v" })).toBe(false);
+    expect(parse(Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`k${i}`, "v"])))).toBe(true);
+    expect(parse(Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`k${i}`, "v"])))).toBe(false);
+  });
+});

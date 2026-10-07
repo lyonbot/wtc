@@ -36,7 +36,7 @@ flowchart LR
 
 - Types and JSDoc: `ContainerConfig`, `ContainerFn` in [packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts); evaluation and validation in [packages/wtc/src/instance/container.ts](../packages/wtc/src/instance/container.ts).
 - The function gets `{ name, params, setupDir }`, may be async, and runs **once, at create** (`start` / `restart` never re-evaluate). Throwing -> `HOOK_FAILED`; a bad result (schema, duplicate mount `target`, `hostForwards` containing `socksPort`, `env` key that is a param or starts with `WTC_`, missing bind source) -> `INVALID_MANIFEST`.
-- **Snapshot**: what was actually used is saved to `<setup>/.wtc/run/<name>/config.json` (`/wtc/run/config.json` in the container): `{ params, container, spec }`, with `spec` the docker-level container spec (socks password redacted). `annotations` is free-form string metadata for your own tooling; wtc never interprets it.
+- **Snapshot**: what was actually used is saved to `<setup>/.wtc/run/<name>/config.json` (`/wtc/run/config.json` in the container): `{ params, container, spec }`, with `spec` the docker-level container spec (socks password redacted). `annotations` is free-form string metadata for your own tooling (wtc never interprets it), also mirrored to docker labels `wtc.ann.<key>`. Limits (rejected with `INVALID_MANIFEST`, never truncated): keys are lowercase alphanumerics separated by `.` / `-`; each label (prefix + key + value) at most 4096 bytes; at most 64 annotations. Docker itself accepted 1 MB labels in a local check, but the cap keeps labels portable (containerd uses 4096) and `docker inspect` readable; put bigger payloads in your own files.
 
 ## Host-side hooks
 

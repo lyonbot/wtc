@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { z } from "zod";
-import { ID_RE } from "../naming";
+import { ANNOTATION_LABEL_PREFIX, ID_RE } from "../naming";
 
 const id = z.string().regex(ID_RE, "must match ^[a-z0-9]+(-[a-z0-9]+)*$");
 const port = z.number().int().min(1).max(65535);
@@ -34,11 +34,23 @@ const agent = z.object({
   version: z.string().min(1).default("latest"),
 }).strict().default({});
 
+/** Annotations are mirrored to docker labels `wtc.ann.<key>`: keep keys label-safe and each label under the containerd-style 4096-byte (key + value) cap. */
+const annotationKey = z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)*$/, "annotation keys: lowercase alphanumerics separated by single '.' or '-'");
+const MAX_LABEL_BYTES = 4096;
+const MAX_ANNOTATIONS = 64;
+
 const containerSchema = z.object({
   mounts: z.array(mount).default([]),
   hostForwards: z.array(port).default([]),
   env: z.record(envKey.refine((k) => !k.startsWith("WTC_"), "env keys starting with WTC_ are reserved"), z.string()).default({}),
-  annotations: z.record(z.string(), z.string()).default({}),
+  annotations: z.record(annotationKey, z.string()).default({}).superRefine((a, ctx) => {
+    const entries = Object.entries(a);
+    if (entries.length > MAX_ANNOTATIONS) ctx.addIssue({ code: "custom", message: `at most ${MAX_ANNOTATIONS} annotations` });
+    for (const [k, v] of entries) {
+      const bytes = Buffer.byteLength(ANNOTATION_LABEL_PREFIX + k) + Buffer.byteLength(v);
+      if (bytes > MAX_LABEL_BYTES) ctx.addIssue({ code: "custom", path: [k], message: `label ${ANNOTATION_LABEL_PREFIX}${k} is ${bytes} bytes (key + value), max ${MAX_LABEL_BYTES}` });
+    }
+  }),
 }).strict();
 
 /** Validates the result of a function-valued `container`. */
@@ -146,7 +158,12 @@ export interface ContainerConfig {
   hostForwards: number[];
   /** Extra container env. Keys starting with `WTC_` are reserved and must not collide with param names. */
   env: Record<string, string>;
-  /** Free-form metadata for your own tooling; stored verbatim in the config snapshot, never interpreted by wtc. */
+  /**
+   * Free-form metadata for your own tooling, never interpreted by wtc. Stored in the config snapshot and mirrored to
+   * docker labels `wtc.ann.<key>` (so `docker ps --filter label=wtc.ann.<key>=<v>` works). Keys: lowercase alphanumerics
+   * separated by `.` / `-`; each label (prefix + key + value) <= 4096 bytes and at most 64 annotations, otherwise
+   * INVALID_MANIFEST (never truncated). Put bigger payloads in your own files.
+   */
   annotations: Record<string, string>;
 }
 

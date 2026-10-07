@@ -28,3 +28,6 @@ export const LABEL = {
   socksHostPort: "wtc.socksHostPort",
   scope: "wtc.scope",
 } as const;
+
+/** Prefix of the labels carrying `container.annotations` (`wtc.ann.<key>`). */
+export const ANNOTATION_LABEL_PREFIX = "wtc.ann.";

@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { WtcError } from "../errors";
-import { containerName, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
+import { ANNOTATION_LABEL_PREFIX, containerName, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
 import type { CreateSpec, PlatformInfo, RuntimeMount } from "../runtime/types";
 import { PROTOCOL_VERSION } from "../version";
 import type { ContainerConfig } from "../setup/schema";
@@ -89,6 +89,7 @@ export function buildCreateSpec(o: {
     name: containerName(id, o.name),
     image: o.imageRef,
     labels: {
+      ...Object.fromEntries(Object.entries(o.container.annotations).map(([k, v]) => [ANNOTATION_LABEL_PREFIX + k, v])),
       [LABEL.setup]: id,
       [LABEL.setupDir]: setup.dir,
       [LABEL.name]: o.name,

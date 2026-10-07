@@ -428,3 +428,58 @@ describe("carried-over fixes (task 7)", () => {
     expect((await err(collect(up(t.ctx, "a", { set: { NOPE: "1" } }))))?.code).toBe("PARAM_UNKNOWN");
   });
 });
+
+describe("hooks.preBoot", () => {
+  const withHook = () => {
+    const calls: { name: string; event: string; setupDir: string }[] = [];
+    const t = setup({ hooks: { preBoot: (c) => void calls.push(c) } });
+    return { t, calls };
+  };
+
+  test("fires on up (create) and on up of a stopped instance, with event up", async () => {
+    const { t, calls } = withHook();
+    await created(t);
+    expect(calls).toEqual([{ name: "a", event: "up", setupDir: t.dir }]);
+    await t.rt.stop(C("a"));
+    await collect(up(t.ctx, "a", { wait: false }));
+    expect(calls.map((c) => c.event)).toEqual(["up", "up"]);
+  });
+
+  test("fires for start (stopped only) and restart; not for no-op calls", async () => {
+    const { t, calls } = withHook();
+    await created(t);
+    calls.length = 0;
+    await start(t.ctx, "a"); // running -> no-op
+    writeStatus(t, "a", "ready");
+    await collect(up(t.ctx, "a", {})); // ready -> done immediately
+    expect(calls).toEqual([]);
+    await stop(t.ctx, "a");
+    await start(t.ctx, "a");
+    await restart(t.ctx, "a");
+    expect(calls.map((c) => c.event)).toEqual(["start", "restart"]);
+  });
+
+  test("not fired by ls / status / stop / rm", async () => {
+    const { t, calls } = withHook();
+    await created(t);
+    calls.length = 0;
+    await ls(t.ctx);
+    await status(t.ctx, "a");
+    await stop(t.ctx, "a");
+    await rm(t.ctx, "a", { force: true });
+    expect(calls).toEqual([]);
+  });
+
+  test("async hook is awaited; a throw aborts the boot with HOOK_FAILED", async () => {
+    let done = false;
+    const t1 = setup({ hooks: { preBoot: async () => { await new Promise((r) => setTimeout(r, 20)); done = true; } } });
+    await created(t1);
+    expect(done).toBe(true);
+
+    const t2 = setup({ hooks: { preBoot: () => { throw new Error("boom"); } } });
+    const e = await err(collect(up(t2.ctx, "a", { wait: false })));
+    expect(e?.code).toBe("HOOK_FAILED");
+    expect(e?.message).toContain("boom");
+    expect(t2.rt.containers.has(C("a"))).toBe(false);
+  });
+});

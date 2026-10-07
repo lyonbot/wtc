@@ -30,6 +30,21 @@ flowchart LR
   B -->|exit != 0 / timeout| F[failed, container stays up]
 ```
 
+## Host-side hooks
+
+`hooks` in the manifest are TS functions that run **on the host** (container-side logic stays in `init.sh` / `preRemove`). Contract and payload types are in the JSDoc of `SetupHooks` ([packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts)); the call sites are in [packages/wtc/src/instance/instance.ts](../packages/wtc/src/instance/instance.ts).
+
+- **`preBoot({ name, event, setupDir })`**: before a container is created or (re)started, i.e. before `init.sh` runs. Use it for e.g. refreshing host checkouts that `init.sh` clones from (see "faster clones" below). Failing it aborts the boot (`HOOK_FAILED`); `try/catch` inside to make it best-effort.
+- **No top-level side effects in `wtc.setup.ts`**: it is imported by every command (`ls`, `status`, ...). Do not branch on `process.argv`; use a hook.
+
+```mermaid
+flowchart LR
+  U[up / start / restart] --> H{needs a boot?}
+  H -- no (ready, running) --> X[no hook]
+  H -- yes --> P[hooks.preBoot] -->|throws| F[HOOK_FAILED, nothing started]
+  P --> B[create/start container] --> I[init.sh]
+```
+
 ## Image requirements
 
 - Needed: bash, git, openssh-client, `flock` (util-linux), node >= 22, pnpm >= 11. Recommended: tmux, curl (for `checks`).

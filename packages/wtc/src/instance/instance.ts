@@ -5,6 +5,7 @@ import { assertId, containerName, imageRef, instanceVolume, LABEL, pnpmVolume, s
 import type { ContainerInfo, Runtime } from "../runtime/types";
 import { computeImageHash } from "../setup/image-hash";
 import type { LoadedSetup } from "../setup/load";
+import type { BootEvent } from "../setup/schema";
 import { type InstanceState, mergeState, readStatus } from "../status/status";
 import { build, hasImage } from "../ops/build";
 import { assertBindable, buildCreateSpec, instancePaths, resolveBindSource } from "./create-spec";
@@ -200,6 +201,17 @@ async function* createInstance(
   }
 }
 
+/** Run the manifest's host-side `preBoot` hook; any failure aborts the boot as HOOK_FAILED. */
+async function preBoot(ctx: InstanceContext, name: string, event: BootEvent): Promise<void> {
+  const hook = ctx.setup.manifest.hooks.preBoot;
+  if (!hook) return;
+  try {
+    await hook({ name, event, setupDir: ctx.setup.dir });
+  } catch (e) {
+    throw new WtcError("HOOK_FAILED", `hooks.preBoot failed for ${name} (${event}): ${e instanceof Error ? e.message : String(e)}`, "fix wtc.setup.ts, or catch the error inside the hook to make it best-effort");
+  }
+}
+
 /**
  * Bring an instance up (spec §8 / §9): absent → create; stopped → start; booting → wait;
  * ready / failed → done immediately. Waits for ready/failed unless `wait === false`.
@@ -219,6 +231,7 @@ export async function* up(
 
   const existing = await rt.inspect(container);
   if (!existing) {
+    await preBoot(ctx, name, "up");
     yield* createInstance(ctx, name, o, imageRef(m.id, hash));
   } else {
     assertKnownParams(m, o.set ?? {});
@@ -238,6 +251,7 @@ export async function* up(
       return;
     }
     if (s.state === "stopped") {
+      await preBoot(ctx, name, "up");
       yield { type: "action", action: "start" };
       await startExisting(ctx, name, existing);
     }
@@ -275,7 +289,9 @@ export async function* up(
 /** Start a stopped instance (no-op when running). */
 export async function start(ctx: InstanceContext, name: string): Promise<void> {
   const info = await mustInspect(ctx, name);
-  if (!isRunning(info)) await startExisting(ctx, name, info);
+  if (isRunning(info)) return;
+  await preBoot(ctx, name, "start");
+  await startExisting(ctx, name, info);
 }
 
 export async function stop(ctx: InstanceContext, name: string): Promise<void> {
@@ -286,6 +302,7 @@ export async function stop(ctx: InstanceContext, name: string): Promise<void> {
 /** Runtime restart: entry starts a new boot and reruns init. */
 export async function restart(ctx: InstanceContext, name: string): Promise<void> {
   const info = await mustInspect(ctx, name);
+  await preBoot(ctx, name, "restart");
   await ctx.rt.restart(info.name);
 }
 

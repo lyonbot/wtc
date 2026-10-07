@@ -26,7 +26,14 @@ describe("manifest schema", () => {
         claude: { env: {}, args: [], version: "latest" },
         codex: { env: {}, args: [], version: "latest" },
       },
+      hooks: {},
     });
+  });
+  test("hooks: preBoot must be a function; unknown hook rejected", () => {
+    const fn = () => {};
+    expect(ok({ hooks: { preBoot: fn } }).hooks.preBoot).toBe(fn);
+    bad({ hooks: { preBoot: "echo hi" } });
+    bad({ hooks: { postBoot: fn } });
   });
   test("agents: env literal / fromHost / null, args, version; strict", () => {
     const m = ok({ agents: { claude: { env: { A: "1", B: { fromHost: "X" }, C: null }, args: ["--model", "opus"], version: "2.1.0" } } });

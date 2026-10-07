@@ -34,6 +34,8 @@ const agent = z.object({
   version: z.string().min(1).default("latest"),
 }).strict().default({});
 
+const hook = <F extends (...a: never[]) => unknown>() => z.custom<F>((v) => typeof v === "function", "must be a function");
+
 export const manifestSchema = z.object({
   id,
   image: z.object({
@@ -56,12 +58,47 @@ export const manifestSchema = z.object({
   readyTimeout: z.number().positive().default(900),
   ssh: z.object({ knownHosts: z.array(z.string()).default([]) }).default({}),
   agents: z.object({ claude: agent, codex: agent }).strict().default({}),
+  hooks: z.object({ preBoot: hook<BootHook>().optional() }).strict().default({}),
 }).superRefine((m, ctx) => {
   if (m.hostForwards.includes(m.socksPort))
     ctx.addIssue({ code: "custom", path: ["socksPort"], message: "socksPort must not appear in hostForwards" });
   if (m.socksHostPortRange[0] > m.socksHostPortRange[1])
     ctx.addIssue({ code: "custom", path: ["socksHostPortRange"], message: "range start must be <= end" });
 });
+
+/** What triggered a boot: the `wtc` command (or library call) of the same name. `up` covers both create and starting a stopped instance. */
+export type BootEvent = "up" | "start" | "restart";
+
+/** Argument of {@link SetupHooks.preBoot}. */
+export interface BootHookContext {
+  /** Instance name. */
+  name: string;
+  event: BootEvent;
+  /** Absolute setup directory (where `wtc.setup.ts` lives). */
+  setupDir: string;
+}
+
+export type BootHook = (ctx: BootHookContext) => void | Promise<void>;
+
+/**
+ * Host-side lifecycle hooks, written as plain TS functions (they run on the host, not in the container;
+ * for container-side logic use `init.sh` / `preRemove`).
+ *
+ * `wtc.setup.ts` is imported by *every* command (`ls`, `status`, ...), so keep its top level free of side
+ * effects and put work here instead.
+ */
+export interface SetupHooks {
+  /**
+   * Runs on the host right before a container is created or (re)started, i.e. before `init.sh` will run.
+   * Fires for `up` (when it has to create or start the instance), `start` (when stopped) and `restart`;
+   * not for no-op calls like `up` on a ready instance. Typical use: refresh host git checkouts that
+   * `init.sh` clones from.
+   *
+   * It is awaited with no timeout (enforce your own). If it throws or rejects, the boot is aborted with
+   * `HOOK_FAILED`; catch inside the hook to make a step best-effort.
+   */
+  preBoot?: BootHook;
+}
 
 export type MountInput =
   | { type: "volume"; name: string; target: string; scope: "setup" | "instance"; readonly?: boolean }
@@ -86,6 +123,7 @@ export interface Manifest {
   readyTimeout: number;
   ssh: { knownHosts: string[] };
   agents: Record<AgentKind, AgentConfig>;
+  hooks: SetupHooks;
 }
 
 export type AgentKind = "claude" | "codex";

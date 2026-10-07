@@ -436,13 +436,13 @@ describe("hooks.preBoot", () => {
     return { t, calls };
   };
 
-  test("fires on up (create) and on up of a stopped instance, with event up", async () => {
+  test("fires on up (event create) and on up of a stopped instance (event start)", async () => {
     const { t, calls } = withHook();
     await created(t);
-    expect(calls).toMatchObject([{ name: "a", event: "up", setupDir: t.dir }]);
+    expect(calls).toMatchObject([{ name: "a", event: "create", setupDir: t.dir }]);
     await t.rt.stop(C("a"));
     await collect(up(t.ctx, "a", { wait: false }));
-    expect(calls.map((c) => c.event)).toEqual(["up", "up"]);
+    expect(calls.map((c) => c.event)).toEqual(["create", "start"]);
   });
 
   test("fires for start (stopped only) and restart; not for no-op calls", async () => {
@@ -544,7 +544,7 @@ describe("container (function form)", () => {
     await start(t.ctx, "a");
     await restart(t.ctx, "a");
     expect(n).toBe(1); // container() not re-evaluated
-    expect(seen.map((x) => x.event)).toEqual(["up", "start", "restart"]);
+    expect(seen.map((x) => x.event)).toEqual(["create", "start", "restart"]);
     for (const x of seen) expect(x.config).toMatchObject({ params: { MODE: "b" }, container: { env: { N: "1" }, annotations: { branch: "b" } } });
   });
 

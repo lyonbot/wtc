@@ -160,7 +160,7 @@ async function* createInstance(
   const params = resolveParams(m, o.set ?? {});
   const platform = await rt.platform();
   const cfg = await resolveContainer(ctx, name, params);
-  await preBoot(ctx, name, "up", { params, container: cfg });
+  await preBoot(ctx, name, "create", { params, container: cfg });
 
   // fail fast (before build / volumes): every bind source must be shared with the runtime VM
   assertBindable(
@@ -281,7 +281,7 @@ export async function* up(
       return;
     }
     if (s.state === "stopped") {
-      await preBootExisting(ctx, name, "up");
+      await preBootExisting(ctx, name, "start");
       yield { type: "action", action: "start" };
       await startExisting(ctx, name, existing);
     }

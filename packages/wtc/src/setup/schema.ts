@@ -119,8 +119,11 @@ export const manifestSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["socksHostPortRange"], message: "range start must be <= end" });
 });
 
-/** What triggered a boot: the `wtc` command (or library call) of the same name. `up` covers both create and starting a stopped instance. */
-export type BootEvent = "up" | "start" | "restart";
+/**
+ * Why a boot is happening: `create` = the instance does not exist yet (first `wtc up`); `start` = an existing,
+ * stopped instance is being started (`wtc start`, or `wtc up` on a stopped one); `restart` = `wtc restart`.
+ */
+export type BootEvent = "create" | "start" | "restart";
 
 /** Argument of {@link SetupHooks.preBoot}. */
 export interface BootHookContext {

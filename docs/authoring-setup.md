@@ -4,8 +4,8 @@ A setup is a directory describing how to build and initialise one container per 
 
 ## Layout
 
-- [wtc.setup.ts](../examples/setup-basic/wtc.setup.ts): `export default defineSetup({...})`; `defineSetup` is imported from `"wtc"` (virtual module served by the CLI, [packages/cli/src/main.ts](../packages/cli/src/main.ts)).
-- Manifest fields, defaults and validation: [packages/lib/src/setup/schema.ts](../packages/lib/src/setup/schema.ts) (the only field reference).
+- [wtc.setup.ts](../examples/setup-basic/wtc.setup.ts): `export default defineSetup({...})`; `defineSetup` is imported from `"@lyonbot/wtc/setup"` ([packages/wtc/src/setup/index.ts](../packages/wtc/src/setup/index.ts)). For editor types, put a `package.json` with `@lyonbot/wtc` as a devDependency in the setup dir; without it the CLI still resolves the import via a virtual module ([packages/wtc/src/cli/main.ts](../packages/wtc/src/cli/main.ts)).
+- Manifest fields, defaults and validation: [packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts) (the only field reference).
 - [image/Dockerfile](../examples/setup-basic/image/Dockerfile): default build context. Editing `init.sh` / `scripts/` never rebuilds the image (they are mounted read-only at `/wtc/setup`).
 - [init.sh](../examples/setup-basic/init.sh) and [scripts/](../examples/setup-basic/scripts/restart-dev-server.sh): container-side logic.
 - `.wtc/` (gitignored): host-side run state and logs.
@@ -36,7 +36,7 @@ flowchart LR
 - For `wtc agent`: `tar` (needed), `npm` (auto-installs the agent; otherwise preinstall `claude` / `codex`), `ca-certificates` (needed by codex; `*-slim` bases lack it), `procps` (recommended: codex's shared app-server needs `ps`; without it wtc runs codex with `--no-daemon`). Root is fine.
 - No socat/jq needed; port forwarding, SOCKS and status JSON come from `wtc-kit`.
 - The image `ENTRYPOINT`/`CMD` are ignored; wtc overrides the entrypoint with `wtc-entry`.
-- `wtc doctor` verifies the toolchain ([packages/lib/src/ops/doctor.ts](../packages/lib/src/ops/doctor.ts)).
+- `wtc doctor` verifies the toolchain ([packages/wtc/src/ops/doctor.ts](../packages/wtc/src/ops/doctor.ts)).
 
 ## pnpm gotchas
 
@@ -70,7 +70,7 @@ Not used by the example. An `init.sh` clone can borrow objects from an existing 
 
 ## Coding agents (`wtc agent`)
 
-`wtc agent <name> <claude|codex> [-- args]` runs the agent in the instance `cwd`. Flow: [packages/lib/src/ops/agent.ts](../packages/lib/src/ops/agent.ts); what gets synced: [packages/lib/src/agent/](../packages/lib/src/agent); design: [the agent spec](superpowers/specs/2026-10-01-wtc-agent-design.md).
+`wtc agent <name> <claude|codex> [-- args]` runs the agent in the instance `cwd`. Flow: [packages/wtc/src/ops/agent.ts](../packages/wtc/src/ops/agent.ts); what gets synced: [packages/wtc/src/agent/](../packages/wtc/src/agent); design: [the agent spec](superpowers/specs/2026-10-01-wtc-agent-design.md).
 
 ```mermaid
 flowchart LR
@@ -79,7 +79,7 @@ flowchart LR
 ```
 
 - **Every launch** re-syncs the host login plus user-level config: Claude credentials (macOS Keychain first), user MCP servers, `settings.json` (minus `hooks` / `statusLine` / helper commands), `CLAUDE.md`, skills, plugins (without `.git`); Codex `auth.json`, a filtered `config.toml`, `AGENTS.md`, skills. Container-side history is kept.
-- **Permissions**: the container is the sandbox. claude gets `--dangerously-skip-permissions` (+ `IS_SANDBOX=1` for root), codex `--dangerously-bypass-approvals-and-sandbox` (bubblewrap cannot run in an unprivileged container). Built-ins also disable auto-update / telemetry (`AGENTS` in [ops/agent.ts](../packages/lib/src/ops/agent.ts); codex's go into the synced `config.toml`, since any `-c` forces codex into embedded mode). First-run dialogs (onboarding, folder trust, bypass / auto-mode prompts) are pre-answered.
+- **Permissions**: the container is the sandbox. claude gets `--dangerously-skip-permissions` (+ `IS_SANDBOX=1` for root), codex `--dangerously-bypass-approvals-and-sandbox` (bubblewrap cannot run in an unprivileged container). Built-ins also disable auto-update / telemetry (`AGENTS` in [ops/agent.ts](../packages/wtc/src/ops/agent.ts); codex's go into the synced `config.toml`, since any `-c` forces codex into embedded mode). First-run dialogs (onboarding, folder trust, bypass / auto-mode prompts) are pre-answered.
 - **Manifest `agents.<claude|codex>`**: `env` (literal, `{ fromHost: "VAR" }`, or `null` to drop a built-in), `args` (before CLI args), `version` (auto-install version). Applied per launch; never recreates the container.
 - **Token refresh**: the container gets a copy of the host tokens and nothing is written back. If a long container session refreshes them, the host (or another container) may be logged out. For many concurrent containers prefer `claude setup-token` + `agents.claude.env.CLAUDE_CODE_OAUTH_TOKEN: { fromHost: "…" }` for Claude and an API key for Codex.
 - **Security**: code running in the container can read the synced credentials. Use only with trusted repositories.
@@ -106,5 +106,5 @@ flowchart LR
 
 ## See also
 
-- Agent usage of the CLI: [packages/cli/skill/SKILL.md](../packages/cli/skill/SKILL.md)
+- Agent usage of the CLI: [packages/wtc/skill/SKILL.md](../packages/wtc/skill/SKILL.md)
 - Running the example end to end: [README.md](../README.md), [DEVELOPMENT.md](../DEVELOPMENT.md)

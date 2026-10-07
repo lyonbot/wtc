@@ -7,8 +7,8 @@
   "scripts": {
     "build:kit": "bash kit/build.sh",
     "test": "bun test",
-    "build": "bun run build:kit && bun build packages/cli/src/main.ts --compile --outfile dist/wtc",
-    "typecheck": "tsc -b packages/lib packages/cli"
+    "build": "bun run build:kit && bun build packages/wtc/src/cli/main.ts --compile --outfile dist/wtc",
+    "typecheck": "tsc -b packages/wtc"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",

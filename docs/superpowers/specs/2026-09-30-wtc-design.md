@@ -2,7 +2,7 @@
 
 - **日期**：2026-09-30
 - **状态**：Draft，待评审
-- **范围**：v1 = `@wtc/lib` + `@wtc/cli` + `kit/` + `examples/setup-basic` + 文档交付物（§15）；webui 仅预留接口
+- **范围**：v1 = `@lyonbot/wtc-lib` + `@lyonbot/wtc-cli` + `kit/` + `examples/setup-basic` + 文档交付物（§15）；webui 仅预留接口
 
 ## 1. 目标与价值
 
@@ -43,7 +43,7 @@
 ```mermaid
 flowchart LR
   subgraph host[Host]
-    CLI["wtc (packages/cli)"] --> LIB["@wtc/lib (packages/lib)"]
+    CLI["wtc (packages/cli)"] --> LIB["@lyonbot/wtc-lib (packages/lib)"]
     WEB["webui (future)"] -.-> LIB
     LIB --> RT["docker CLI"]
     LIB <--> ST8["&lt;setup&gt;/.wtc/{run,log}"]
@@ -113,7 +113,7 @@ flowchart LR
 
 ## 5. Setup 目录与 manifest
 
-`wtc.setup.ts` 中 `import { defineSetup } from "wtc"`：`wtc` 是 CLI 注册的虚拟模块（`bun` 与编译产物均可用，`@wtc/lib` 同理，见 `packages/cli/src/main.ts`）；暂无编辑器类型提示，直接 `export default {...}` 亦可。
+`wtc.setup.ts` 中 `import { defineSetup } from "wtc"`：`wtc` 是 CLI 注册的虚拟模块（`bun` 与编译产物均可用，`@lyonbot/wtc-lib` 同理，见 `packages/cli/src/main.ts`）；暂无编辑器类型提示，直接 `export default {...}` 亦可。
 
 ```
 setups/basic/

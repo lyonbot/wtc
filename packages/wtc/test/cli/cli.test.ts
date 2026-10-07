@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-const main = join(import.meta.dir, "../src/main.ts");
-const fixture = join(import.meta.dir, "../../lib/test/fixtures/basic");
+const main = join(import.meta.dir, "../../src/cli/main.ts");
+const fixture = join(import.meta.dir, "../fixtures/basic");
 async function wtc(args: string[], env: Record<string, string> = {}) {
   const p = Bun.spawn(["bun", main, ...args], { stdout: "pipe", stderr: "pipe", env: { ...process.env, WTC_FAKE_RUNTIME: "1", ...env } });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);

@@ -1,4 +1,4 @@
-import type { InstanceSummary, UpEvent } from "@wtc/lib";
+import type { InstanceSummary, UpEvent } from "../index";
 
 export function table(rows: string[][]): string {
   const w = rows[0]!.map((_, i) => Math.max(...rows.map((r) => (r[i] ?? "").length)));

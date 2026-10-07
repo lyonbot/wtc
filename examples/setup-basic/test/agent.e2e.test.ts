@@ -7,14 +7,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import * as lib from "../../../packages/lib/src/index";
-import { createWtc, DockerCliRuntime, type Wtc } from "../../../packages/lib/src/index";
-import { portableServers } from "../../../packages/lib/src/agent/bundle";
+import * as lib from "../../../packages/wtc/src/index";
+import { createWtc, DockerCliRuntime, type Wtc } from "../../../packages/wtc/src/index";
+import { portableServers } from "../../../packages/wtc/src/agent/bundle";
 
 const E2E = process.env.WTC_AGENT_E2E === "1";
 const ID = "wtcag";
 const MIN = 60_000;
-Bun.plugin({ name: "wtc-virtual-ag", setup: (b) => void b.module("wtc", () => ({ exports: { ...lib }, loader: "object" })) });
+Bun.plugin({ name: "wtc-virtual-ag", setup: (b) => { for (const id of ["wtc", "@lyonbot/wtc/setup"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" })); } });
 
 const root = join(homedir(), ".cache", "wtc-it", `agent-${Date.now().toString(36)}`);
 const rt = new DockerCliRuntime();

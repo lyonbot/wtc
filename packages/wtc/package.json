@@ -1,0 +1,12 @@
+{
+  "name": "@lyonbot/wtc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "wtc": "src/cli/main.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./setup": "./src/setup/index.ts"
+  },
+  "dependencies": { "commander": "12", "zod": "3" }
+}

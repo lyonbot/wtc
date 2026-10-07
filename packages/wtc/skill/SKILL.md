@@ -11,7 +11,7 @@ One docker container per worktree/instance, defined by a `wtc.setup.ts` in the p
 
 - Project contains `wtc.setup.ts` (or user mentions wtc / per-worktree containers).
 - You need an isolated env per branch, or to reach a dev server inside a container.
-- Do not use for one-off `docker run`; do not edit `wtc.setup.ts` unless asked. It may `import { defineSetup } from "wtc"` or just `export default { ... }`.
+- Do not use for one-off `docker run`; do not edit `wtc.setup.ts` unless asked. It may `import { defineSetup } from "@lyonbot/wtc/setup"` or just `export default { ... }`.
 
 ## Quick reference
 

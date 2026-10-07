@@ -74,7 +74,7 @@ The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest 
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
 | `build`, `gc`, `doctor`, `skill` | image build, cleanup, environment check, agent guide |
 
-Most commands take `--json`. The full reference with flags and error codes is [packages/cli/skill/SKILL.md](packages/cli/skill/SKILL.md).
+Most commands take `--json`. The full reference with flags and error codes is [packages/wtc/skill/SKILL.md](packages/wtc/skill/SKILL.md).
 
 ## Instance lifecycle
 
@@ -98,13 +98,13 @@ stateDiagram-v2
 A setup is a directory with `wtc.setup.ts` (manifest), `image/Dockerfile`, `init.sh` and optional `scripts/`. Start by copying [examples/setup-basic](examples/setup-basic).
 
 - Guide (init contract, pnpm and platform gotchas, private git, SOCKS exposure): [docs/authoring-setup.md](docs/authoring-setup.md)
-- Manifest fields: [packages/lib/src/setup/schema.ts](packages/lib/src/setup/schema.ts)
+- Manifest fields: [packages/wtc/src/setup/schema.ts](packages/wtc/src/setup/schema.ts)
 
 > **Security note:** the SOCKS port binds `0.0.0.0` by default. Anyone on your LAN can reach the container's `127.0.0.1` services and, through the container, the host. Set `socksBind: "127.0.0.1"` or `socksAuth` to restrict it. See [SOCKS exposure](docs/authoring-setup.md#socks-exposure).
 
 ## Using wtc from an AI agent
 
-`wtc skill > .claude/skills/wtc/SKILL.md` installs the agent guide ([packages/cli/skill/SKILL.md](packages/cli/skill/SKILL.md)).
+`wtc skill > .claude/skills/wtc/SKILL.md` installs the agent guide ([packages/wtc/skill/SKILL.md](packages/wtc/skill/SKILL.md)).
 
 ## More
 

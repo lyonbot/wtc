@@ -9,26 +9,21 @@
         "typescript": "^7.0.2",
       },
     },
-    "packages/cli": {
-      "name": "@wtc/cli",
+    "packages/wtc": {
+      "name": "@lyonbot/wtc",
       "version": "0.1.0",
       "bin": {
-        "wtc": "src/main.ts",
+        "wtc": "src/cli/main.ts",
       },
       "dependencies": {
-        "@wtc/lib": "workspace:*",
         "commander": "12",
-      },
-    },
-    "packages/lib": {
-      "name": "@wtc/lib",
-      "version": "0.1.0",
-      "dependencies": {
         "zod": "3",
       },
     },
   },
   "packages": {
+    "@lyonbot/wtc": ["@lyonbot/wtc@workspace:packages/wtc"],
+
     "@types/bun": ["@types/bun@1.4.2", "https://mirrors.cloud.tencent.com/npm/@types/bun/-/bun-1.4.2.tgz", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
 
     "@types/node": ["@types/node@26.6.3", "https://mirrors.cloud.tencent.com/npm/@types/node/-/node-26.6.3.tgz", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg=="],
@@ -72,10 +67,6 @@
     "@typescript/typescript-win32-arm64": ["@typescript/typescript-win32-arm64@7.0.2", "https://mirrors.cloud.tencent.com/npm/@typescript/typescript-win32-arm64/-/typescript-win32-arm64-7.0.2.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-Gyl1Vy6OsWesLzmq+EP0Fb7b4Nid5232AvcA2SFcdYreldpNtYFFofPjnt62y9hQy7VTaZp65ICJjuAQRaVcIQ=="],
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "https://mirrors.cloud.tencent.com/npm/@typescript/typescript-win32-x64/-/typescript-win32-x64-7.0.2.tgz", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
-
-    "@wtc/cli": ["@wtc/cli@workspace:packages/cli"],
-
-    "@wtc/lib": ["@wtc/lib@workspace:packages/lib"],
 
     "bun-types": ["bun-types@1.4.2", "https://mirrors.cloud.tencent.com/npm/bun-types/-/bun-types-1.4.2.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 

@@ -8,15 +8,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import * as lib from "../../../packages/lib/src/index";
-import { createWtc, DockerCliRuntime, WtcError, type UpEvent, type Wtc } from "../../../packages/lib/src/index";
+import * as lib from "../../../packages/wtc/src/index";
+import { createWtc, DockerCliRuntime, WtcError, type UpEvent, type Wtc } from "../../../packages/wtc/src/index";
 
 const IT = process.env.WTC_INTEGRATION === "1";
 const ID = "wtcit";
 const MIN = 60_000;
 
 // same virtual module the CLI registers, so the copied wtc.setup.ts can `import { defineSetup } from "wtc"`
-Bun.plugin({ name: "wtc-virtual-it", setup: (b) => void b.module("wtc", () => ({ exports: { ...lib }, loader: "object" })) });
+Bun.plugin({ name: "wtc-virtual-it", setup: (b) => { for (const id of ["wtc", "@lyonbot/wtc/setup"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" })); } });
 
 const root = join(homedir(), ".cache", "wtc-it", `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`);
 const rt = new DockerCliRuntime();

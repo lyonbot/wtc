@@ -2,9 +2,9 @@ import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWtc, FakeRuntime, type UpEvent, type Wtc } from "@wtc/lib";
-import { runCli } from "../src/main";
-import { upRenderer } from "../src/render";
+import { createWtc, FakeRuntime, type UpEvent, type Wtc } from "../../src/index";
+import { runCli } from "../../src/cli/main";
+import { upRenderer } from "../../src/cli/render";
 
 const tmp = mkdtempSync(join(tmpdir(), "wtc-cli-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -24,7 +24,7 @@ async function capture(f: () => Promise<number>) {
 
 function mkSetup() {
   const dir = mkdtempSync(join(tmp, "s-"));
-  cpSync(join(import.meta.dir, "../../lib/test/fixtures/basic/image"), join(dir, "image"), { recursive: true });
+  cpSync(join(import.meta.dir, "../fixtures/basic/image"), join(dir, "image"), { recursive: true });
   writeFileSync(join(dir, "wtc.setup.ts"), `export default { id: "clitest", scripts: { s: { run: "x", description: "d" } } };\n`);
   return dir;
 }

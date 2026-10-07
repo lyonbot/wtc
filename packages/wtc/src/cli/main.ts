@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
 import { Command, CommanderError } from "commander";
-import * as lib from "@wtc/lib";
-import { AGENT_KINDS, createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type AgentKind, type Wtc } from "@wtc/lib";
-import skillMd from "../skill/SKILL.md" with { type: "text" };
+import * as lib from "../index";
+import { AGENT_KINDS, createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type AgentKind, type Wtc } from "../index";
+import skillMd from "../../skill/SKILL.md" with { type: "text" };
 import { renderLs, renderSummary, table, upRenderer } from "./render";
 
-/** Virtual modules so a user's wtc.setup.ts can `import { defineSetup } from "wtc"` (also in the compiled binary). */
+/** Virtual modules so a user's wtc.setup.ts can import `defineSetup` without installing the package (also in the compiled binary). */
 Bun.plugin({
   name: "wtc-virtual",
   setup(b) {
-    for (const id of ["wtc", "@wtc/lib"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" }));
+    for (const id of ["wtc", "@lyonbot/wtc", "@lyonbot/wtc/setup"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" }));
   },
 });
 

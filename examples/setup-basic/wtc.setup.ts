@@ -1,4 +1,4 @@
-import { defineSetup } from "wtc";
+import { defineSetup } from "@lyonbot/wtc/setup";
 
 /** Minimal example setup: a tiny node server in /workspace/app, used by the integration tests. */
 export default defineSetup({

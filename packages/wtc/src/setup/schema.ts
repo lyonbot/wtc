@@ -211,8 +211,8 @@ export interface ConfigSnapshot {
 export type ContainerInput = z.input<typeof containerSchema>;
 
 /**
- * Function form of `container`: called once when an instance is created (after `hooks.preBoot`), and
- * its result is validated like the static form. May be async.
+ * Function form of `container`: called once when an instance is created (before `hooks.preBoot`, which
+ * receives its result as `ctx.config`), and its result is validated like the static form. May be async.
  */
 export type ContainerFn = (ctx: ContainerContext) => ContainerInput | Promise<ContainerInput>;
 

@@ -507,6 +507,17 @@ describe("container (function form)", () => {
     expect(calls.length).toBe(1);
   });
 
+  test("annotations: stored as labels, surfaced in status/ls summaries only when present", async () => {
+    const t = setup({ container: () => ({ annotations: { branch: "feat-x", "a.b": "1" } }) });
+    await created(t);
+    expect(t.rt.containers.get(C("a"))!.spec.labels).toMatchObject({ "wtc.ann.branch": "feat-x", "wtc.ann.a.b": "1" });
+    expect((await status(t.ctx, "a")).annotations).toEqual({ branch: "feat-x", "a.b": "1" });
+    expect((await ls(t.ctx))[0]!.annotations).toEqual({ branch: "feat-x", "a.b": "1" });
+    const plain = setup();
+    await created(plain);
+    expect("annotations" in (await status(plain.ctx, "a"))).toBe(false);
+  });
+
   test("snapshot config.json: params, container config, redacted spec, socks password redacted", async () => {
     const t = setup({ socksAuth: { user: "u", pass: "secret" }, container: () => ({ env: { FOO: "1" } }) });
     await created(t);

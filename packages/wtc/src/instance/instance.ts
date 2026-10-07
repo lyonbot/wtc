@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
 import { WtcError } from "../errors";
 import { type Health, runChecks } from "../health/health";
-import { assertId, containerName, imageRef, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
+import { ANNOTATION_LABEL_PREFIX, assertId, containerName, imageRef, instanceVolume, LABEL, pnpmVolume, setupVolume } from "../naming";
 import type { ContainerInfo, Runtime } from "../runtime/types";
 import { computeImageHash } from "../setup/image-hash";
 import type { LoadedSetup } from "../setup/load";
@@ -37,6 +37,8 @@ export interface InstanceSummary {
   socks?: { bind: string; port: number; urls: string[] };
   staleImage: boolean;
   bootId?: string;
+  /** `container.annotations` as saved on the container (docker labels `wtc.ann.<key>`); absent when none. */
+  annotations?: Record<string, string>;
 }
 
 export type UpEvent =
@@ -97,6 +99,8 @@ export async function summarize(ctx: InstanceContext, name: string, info: Contai
   };
   if (merged.message !== undefined) s.message = merged.message;
   if (merged.bootId !== undefined) s.bootId = merged.bootId;
+  const ann = Object.entries(info?.labels ?? {}).filter(([k]) => k.startsWith(ANNOTATION_LABEL_PREFIX));
+  if (ann.length) s.annotations = Object.fromEntries(ann.map(([k, v]) => [k.slice(ANNOTATION_LABEL_PREFIX.length), v]));
   const port = Number(info?.labels[LABEL.socksHostPort]);
   if (info && port) {
     const bind = (await readCreate(p.create))?.socksBind ?? ctx.setup.manifest.socksBind;

@@ -18,6 +18,7 @@ export function renderSummary(s: InstanceSummary): string {
   if (s.health) l.push(`health:  ${s.health}`);
   if (s.message) l.push(`message: ${s.message}`);
   if (s.socks) l.push(`socks:   ${s.socks.urls.join(", ")}`);
+  for (const [k, v] of Object.entries(s.annotations ?? {})) l.push(`ann:     ${k}=${v}`);
   if (s.staleImage) l.push("image:   stale (run `wtc build`, then rm + up to recreate)");
   return l.join("\n");
 }

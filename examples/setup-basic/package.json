@@ -1,0 +1,12 @@
+{
+  "name": "wtc-setup-basic",
+  "private": true,
+  "type": "module",
+  "devDependencies": { "@lyonbot/wtc": "^0.1.0" },
+  "scripts": {
+    "up": "wtc up",
+    "ls": "wtc ls",
+    "shell": "wtc shell",
+    "doctor": "wtc doctor"
+  }
+}

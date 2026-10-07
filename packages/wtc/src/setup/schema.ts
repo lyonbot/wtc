@@ -130,7 +130,7 @@ export interface BootHookContext {
   /** Instance name. */
   name: string;
   event: BootEvent;
-  /** Absolute setup directory (where `wtc.setup.ts` lives). */
+  /** Absolute **host** path of the setup directory (where `wtc.setup.ts` lives); inside the container it is mounted read-only at `/wtc/setup`. */
   setupDir: string;
   /**
    * The instance's effective config: freshly resolved for a create, otherwise the saved snapshot (what the
@@ -182,7 +182,7 @@ export interface ContainerContext {
   name: string;
   /** Resolved params (defaults applied), i.e. what `wtc up --set K=V` produced. */
   params: Record<string, string>;
-  /** Absolute setup directory. */
+  /** Absolute **host** path of the setup directory (where `wtc.setup.ts` lives); inside the container it is mounted read-only at `/wtc/setup`. */
   setupDir: string;
 }
 

@@ -38,6 +38,13 @@ describe("readClaudeCredentials", () => {
     expect(await readClaudeCredentials({ ...h, env: { CLAUDE_CONFIG_DIR: cfg } })).toContain("claudeAiOauth");
     const e = await readClaudeCredentials(mkHost()).catch((x) => x);
     expect(e.code).toBe("AGENT_NO_CREDENTIALS");
+  });  test("custom config dir reads the hashed Keychain item claude uses for it", async () => {
+    const services: string[] = [];
+    const h = mkHost({ platform: "darwin", readKeychain: async (s) => { services.push(s); return CREDS; } });
+    await readClaudeCredentials(h);
+    await readClaudeCredentials(h, "/Users/u/.claude-custom");
+    const hash = new Bun.CryptoHasher("sha256").update("/Users/u/.claude-custom").digest("hex").slice(0, 8);
+    expect(services).toEqual(["Claude Code-credentials", `Claude Code-credentials-${hash}`]);
   });
 });
 

@@ -15,7 +15,7 @@ const IT = process.env.WTC_INTEGRATION === "1";
 const ID = "wtcit";
 const MIN = 60_000;
 
-// same virtual module the CLI registers, so the copied wtc.setup.ts can `import { defineSetup } from "wtc"`
+// same virtual module the CLI registers, so the copied wtc.setup.ts can `import { defineSetup } from "@lyonbot/wtc/setup"`
 Bun.plugin({ name: "wtc-virtual-it", setup: (b) => { for (const id of ["wtc", "@lyonbot/wtc/setup"]) b.module(id, () => ({ exports: { ...lib }, loader: "object" })); } });
 
 const root = join(homedir(), ".cache", "wtc-it", `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`);

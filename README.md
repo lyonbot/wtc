@@ -70,7 +70,7 @@ The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest 
 | `rm <name> [--force]` | `preRemove` guard, then delete container, volumes and state |
 | `ls`, `status <name> [--watch]`, `logs <name> [-f]` | inspect instances and init logs |
 | `run <name> <script>`, `check <name>`, `shell <name>` | run a setup script or health checks, or open a shell |
-| `agent <name> <claude\|codex> [-- args]` | run Claude Code / Codex inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
+| `agent <name> <claude\|codex\|custom> [-- args]` | run Claude Code / Codex (or a custom agent from `wtc.setup.ts`) inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
 | `build`, `gc`, `doctor`, `skill` | image build, cleanup, environment check, agent guide |
 

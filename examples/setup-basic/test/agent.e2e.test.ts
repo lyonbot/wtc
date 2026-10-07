@@ -42,7 +42,7 @@ describe.skipIf(!E2E)("wtc agent (real logins)", () => {
     mkdirSync(dir, { recursive: true });
     cpSync(join(import.meta.dir, ".."), dir, { recursive: true, filter: (s) => !/\/(\.wtc|test|node_modules)$/.test(s) });
     const f = join(dir, "wtc.setup.ts");
-    writeFileSync(f, readFileSync(f, "utf8").replace(`id: "basic",`, `id: "${ID}",\n  socksHostPortRange: [22280, 22379],\n  agents: { claude: { env: { WTC_E2E_MARK: "from-manifest" } } },`));
+    writeFileSync(f, readFileSync(f, "utf8").replace(`id: "basic",`, `id: "${ID}",\n  socksHostPortRange: [22280, 22379],\n  agents: { claude: defineClaudeAgent({ env: { WTC_E2E_MARK: "from-manifest" } }) },`).replace(`import { defineSetup } from "@lyonbot/wtc/setup";`, `import { defineClaudeAgent, defineSetup } from "@lyonbot/wtc/setup";`));
     w = await createWtc({ setupDir: dir, runtime: rt });
     for await (const e of w.up("e2e", {})) if (e.type === "done") expect(e.summary.state).toBe("ready");
   }, 15 * MIN);

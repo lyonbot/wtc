@@ -2,6 +2,7 @@
 node_modules
 kit/dist
 packages/wtc/kit
+packages/wtc/docs
 dist
 **/.wtc/
 *.tsbuildinfo

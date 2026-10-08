@@ -44,6 +44,7 @@
     "src",
     "skill",
     "kit",
+    "docs",
     "dist/src/**/*.d.ts"
   ],
   "dependencies": {
@@ -51,7 +52,7 @@
     "zod": "3"
   },
   "scripts": {
-    "prepack": "bash ../../kit/build.sh && tsc -b ."
+    "prepack": "bash ../../kit/build.sh && bun scripts/sync-docs.ts && tsc -b ."
   },
   "publishConfig": {
     "access": "public"

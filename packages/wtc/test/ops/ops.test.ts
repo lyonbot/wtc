@@ -8,6 +8,8 @@ import { logs } from "../../src/ops/logs";
 import { tunnel } from "../../src/ops/tunnel";
 import { open } from "../../src/ops/open";
 import { gc } from "../../src/ops/gc";
+import { lockDir } from "../../src/instance/lock";
+import { WtcError } from "../../src/errors";
 import { doctor } from "../../src/ops/doctor";
 import { noProxyLoopback } from "../../src/ops/common";
 import { computeImageHash } from "../../src/setup/image-hash";
@@ -252,6 +254,52 @@ describe("gc", () => {
     t.rt.images.push({ ref: `wtc-demo:${await computeImageHash(t.ctx.setup)}`, id: "i" });
     t.rt.execHandler = () => ({ exitCode: 1, stdout: "", stderr: "ERR_PNPM" });
     expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "failed", storePruned: false });
+  });
+
+  const locks = (t: ReturnType<typeof setup>) => (existsSync(lockDir(t.dir)) ? readdirSync(lockDir(t.dir)) : []);
+  test("up releases its create lease after success and after failure", async () => {
+    const t = setup();
+    await created(t, "a");
+    expect(locks(t)).toEqual([]);
+    t.rt.failNextStart = new WtcError("RUNTIME_ERROR", "boom");
+    expect(await err(created(t, "b"))).toMatchObject({ code: "RUNTIME_ERROR" });
+    expect(locks(t)).toEqual([]);
+    const h = setup({ hooks: { preBoot: () => { throw new Error("nope"); } } });
+    expect(await err(created(h, "c"))).toMatchObject({ code: "HOOK_FAILED" });
+    expect(locks(h)).toEqual([]);
+  });
+  test("up abandoned mid-create releases its lease", async () => {
+    const t = setup();
+    for await (const e of up(t.ctx, "a", { wait: false })) if (e.type === "action") break;
+    expect(locks(t)).toEqual([]);
+  });
+  test("gc during an in-flight create fails with LOCKED and removes nothing; dry-run still reports", async () => {
+    const t = setup({ container: { mounts: [{ type: "volume", name: "pg", target: "/pg", scope: "instance" }] } });
+    let reached!: () => void;
+    let resume!: () => void;
+    const atCreate = new Promise<void>((r) => (reached = r));
+    const gate = new Promise<void>((r) => (resume = r));
+    const create = t.rt.create.bind(t.rt);
+    t.rt.create = async (spec) => {
+      reached();
+      await gate;
+      return create(spec);
+    };
+    const running = created(t, "a");
+    await atCreate; // volumes + run/log dirs exist, container does not
+    const e = await err(gc(t.ctx));
+    expect(e).toMatchObject({ code: "LOCKED" });
+    expect(e!.message).toContain(lockDir(t.dir));
+    expect(e!.message).toMatch(/create\.a\..+\.lock/);
+    expect(existsSync(join(t.dir, ".wtc", "run", "a"))).toBe(true);
+    expect(t.rt.volumes.has("wtc-demo--a.v.pg")).toBe(true);
+    const dry = await gc(t.ctx, { dryRun: true });
+    expect(dry.removed.map((x) => `${x.kind}:${x.name}`)).toEqual(expect.arrayContaining(["dir:run/a", "volume:wtc-demo--a.v.pg"]));
+    resume();
+    await running;
+    expect(locks(t)).toEqual([]);
+    expect((await gc(t.ctx)).removed.map((x) => x.name)).not.toContain("run/a");
+    expect(t.rt.volumes.has("wtc-demo--a.v.pg")).toBe(true);
   });
 });
 

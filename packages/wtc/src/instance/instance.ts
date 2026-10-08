@@ -9,6 +9,7 @@ import type { BootEvent, ConfigSnapshot } from "../setup/schema";
 import { type InstanceState, mergeState, readStatus } from "../status/status";
 import { build, hasImage } from "../ops/build";
 import { assertBindSourcesExist, resolveContainer } from "./container";
+import { acquireCreate } from "./lock";
 import { assertBindable, buildCreateSpec, instancePaths, resolveBindSource } from "./create-spec";
 import { assertKnownParams, diffParams, resolveParams } from "./params";
 import { allocateSocksPort } from "./ports";
@@ -262,7 +263,13 @@ export async function* up(
 
   const existing = await rt.inspect(container);
   if (!existing) {
-    yield* createInstance(ctx, name, o, imageRef(m.id, hash));
+    // lease keeps `wtc gc` from deleting the volumes / dirs made before the container exists (src/instance/lock.ts)
+    const release = await acquireCreate(setup.dir, name);
+    try {
+      yield* createInstance(ctx, name, o, imageRef(m.id, hash));
+    } finally {
+      await release();
+    }
   } else {
     assertKnownParams(m, o.set ?? {});
     const rec = await readCreate(p.create);

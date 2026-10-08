@@ -3,14 +3,27 @@ import { join } from "node:path";
 import type { InstanceContext } from "../instance/instance";
 import { containerName, imageRef, imageRepo, LABEL, pnpmVolume } from "../naming";
 import { computeImageHash } from "../setup/image-hash";
+import { acquireGc } from "../instance/lock";
 import { hasImage } from "./build";
 
 export type GcItem = { kind: "dir" | "volume" | "image" | "log"; name: string };
 const KEEP_LOGS = 5;
 const list = (d: string) => readdir(d).catch(() => [] as string[]);
 
-/** Remove orphaned state (spec §11). `dryRun` only reports. `store` is set iff `pruneStore` was requested. */
+/**
+ * Remove orphaned state (spec §11). `dryRun` only reports. `store` is set iff `pruneStore` was requested.
+ * A real run holds the exclusive gc lock (`<setup>/.wtc/lock/gc.*.lock`, see instance/lock.ts) and fails with `LOCKED` while an instance is being created.
+ */
 export async function gc(ctx: InstanceContext, o: { dryRun?: boolean; pruneStore?: boolean } = {}) {
+  const release = o.dryRun ? undefined : await acquireGc(ctx.setup.dir);
+  try {
+    return await gcLocked(ctx, o);
+  } finally {
+    await release?.();
+  }
+}
+
+async function gcLocked(ctx: InstanceContext, o: { dryRun?: boolean; pruneStore?: boolean }) {
   const { rt, setup } = ctx;
   const id = setup.manifest.id;
   const removed: GcItem[] = [];

@@ -75,6 +75,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | Code | Meaning | Fix |
 |---|---|---|
 | `SETUP_NOT_FOUND` | no `wtc.setup.ts` | pass `--setup <dir>` or set `WTC_SETUP` |
+| `LOCKED` | `wtc gc` and an instance create (`wtc up`) overlap | wait; the message names the lock file (`<setup>/.wtc/lock/*.lock`), delete it only if its pid is gone |
 | `SETUP_EXISTS` | `wtc init` target is a file or already has scaffold files | use a new/empty dir (e.g. `wtc init wtc-setup`) |
 | `SETUP_ID_CONFLICT` | another setup dir already uses this setup `id` | change `id` in `wtc.setup.ts` or `rm` the other setup's instances |
 | `INVALID_MANIFEST` | manifest fails validation / bind source missing | fix `wtc.setup.ts`; check the message paths |

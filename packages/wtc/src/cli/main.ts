@@ -182,7 +182,16 @@ export function buildProgram(): Command {
       return r.checks.every((c) => c.ok) ? 0 : 1;
     }));
 
-  // `skill` and `--help`/`--version` need no setup: bypass load().
+  // `init`, `skill` and `--help`/`--version` need no setup: bypass load().
+  p.command("init [dir]").description("scaffold a setup (wtc.setup.ts, image/Dockerfile, init.sh, package.json) in dir (default: cwd)")
+    .option("--id <id>", "setup id (default: from the directory name)").option("--json", jopt)
+    .action(async (dir: string | undefined, o: { id?: string; json?: boolean }) => {
+      const r = await lib.initSetup({ dir: dir ?? process.cwd(), ...(o.id !== undefined ? { id: o.id } : {}) });
+      if (o.json) return void json(r);
+      console.log(`created setup "${r.id}" in ${r.dir}:\n${r.created.map((f) => `  ${f}`).join("\n")}`);
+      console.log("next: bun install (editor types), edit init.sh, then `wtc up <name>`");
+    });
+
   p.command("skill").description("print the agent usage guide (SKILL.md)").option("--llms", "strip YAML frontmatter")
     .action((o: { llms?: boolean }) => {
       process.stdout.write(o.llms ? skillMd.replace(/^---\n[\s\S]*?\n---\n+/, "") : skillMd);

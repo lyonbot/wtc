@@ -31,4 +31,5 @@ export * from "./ops/suggest";
 export * from "./ops/stats";
 export * from "./ops/gc";
 export * from "./ops/doctor";
+export * from "./ops/init";
 export * from "./wtc";

@@ -5,7 +5,7 @@
 - **Decision:**
   - Like a project-local `tsc`/`eslint`: after locating the setup dir (`--setup`, `$WTC_SETUP`, nearest `wtc.setup.ts`), if `<setup>/node_modules/@lyonbot/wtc` (or an ancestor's, for hoisted installs) has a **different version**, run its `bin/wtc.js` with the same argv/stdio and exit with its code.
   - Logic lives in [bin/forward.js](../../packages/wtc/bin/forward.js) (node-only, no deps); used by the npm shim [bin/wtc.js](../../packages/wtc/bin/wtc.js) before the bun probe, and by the compiled binary entry [src/cli/main.ts](../../packages/wtc/src/cli/main.ts).
-  - Guards: `WTC_FORWARDED=1` is set on the child (no loops); `WTC_NO_FORWARD=1` disables. No setup found (`--help`, ...) means no forwarding. Notice goes to stderr only when it is a TTY, so `--json` output stays clean.
+  - Guards: `WTC_FORWARDED=1` is set on the child (no loops); `WTC_NO_FORWARD=1` disables. No setup found (`--help`, ...) means no forwarding; `init` never forwards (it creates a setup, so an enclosing one is unrelated). Notice goes to stderr only when it is a TTY, so `--json` output stays clean.
 - **Consequences:**
   - A global wtc older than this feature cannot forward; only newer globals can.
   - The local install needs bun (its shim checks), even if the global one was the compiled binary.

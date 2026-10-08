@@ -45,7 +45,7 @@ wtc doctor             # checks docker, colima mounts / agent forwarding, toolch
 
 ## Quickstart
 
-Try the reference setup [examples/setup-basic](examples/setup-basic). It runs a tiny dev server on port 5173.
+Try the reference setup [examples/setup-basic](examples/setup-basic). It runs a tiny dev server on port 5173. To start your own, `wtc init <dir>`.
 
 ```sh
 cd examples/setup-basic
@@ -60,7 +60,7 @@ wtc rm feat-a                 # runs the setup's preRemove guard first
 
 The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest `wtc.setup.ts` above the current directory.
 
-If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version, that one runs instead (set `WTC_NO_FORWARD=1` to disable).
+If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version, that one runs instead, except for `init` (set `WTC_NO_FORWARD=1` to disable).
 
 **The tunnel address is dynamic.** Run `wtc tunnel <name>` whenever you need it; don't hardcode the port. Always use `socks5h://`, which resolves DNS inside the container. Also make sure `localhost` / `127.0.0.1` is not in the client's `NO_PROXY`, or it will skip the proxy.
 
@@ -68,6 +68,7 @@ If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version
 
 | Command | What it does |
 |---|---|
+| `init [dir] [--id <id>]` | scaffold a new setup ([src/ops/init.ts](packages/wtc/src/ops/init.ts)); needs no existing setup |
 | `up <name> [--set K=V]` | create, start or wait until `ready`; safe to re-run |
 | `start` / `stop` / `restart <name>` | stop keeps code and `node_modules`; restart re-runs `init.sh` |
 | `rm <name> [--force]` | `preRemove` guard, then delete container, volumes and state |

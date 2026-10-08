@@ -48,3 +48,10 @@ test("opt-out and loop guard", () => {
   expect(find(dir, { env: { WTC_NO_FORWARD: "1" } })).toBeUndefined();
   expect(find(dir, { env: { WTC_FORWARDED: "1" } })).toBeUndefined();
 });
+
+test("init never forwards (it creates a setup, the enclosing one is unrelated)", () => {
+  const dir = makeSetup("f", "1.0.0");
+  expect(find(dir, { argv: ["init", "sub"] })).toBeUndefined();
+  expect(find(root, { argv: ["--setup", dir, "init"] })).toBeUndefined();
+  expect(find(dir, { argv: ["ls", "init"] })?.version).toBe("1.0.0");
+});

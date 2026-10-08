@@ -15,6 +15,14 @@ function setupFlag(argv) {
   }
 }
 
+/** First positional of raw argv (the subcommand), skipping `--setup <dir>`. */
+function subcommand(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--setup") i++;
+    else if (!argv[i].startsWith("-")) return argv[i];
+  }
+}
+
 /** Same precedence as resolveSetupDir (src/setup/load.ts); returns undefined instead of throwing. */
 function locateSetupDir(argv, env, cwd) {
   const explicit = setupFlag(argv) || env.WTC_SETUP;
@@ -31,6 +39,8 @@ function locateSetupDir(argv, env, cwd) {
  */
 export function findLocalWtc({ argv, env, cwd, selfVersion }) {
   if (env.WTC_NO_FORWARD || env.WTC_FORWARDED) return undefined;
+  // `init` creates a setup: the cwd's enclosing setup (and its possibly older wtc, maybe without `init`) is unrelated
+  if (subcommand(argv) === "init") return undefined;
   const setupDir = locateSetupDir(argv, env, cwd);
   if (!setupDir) return undefined;
   for (let d = setupDir; ; d = dirname(d)) {

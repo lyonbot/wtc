@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 const main = join(import.meta.dir, "../../src/cli/main.ts");
 const fixture = join(import.meta.dir, "../fixtures/basic");
@@ -21,7 +23,7 @@ describe("cli", () => {
 
   test("--help lists all commands", async () => {
     const r = await wtc(["--help"]);
-    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "gc", "skill", "doctor"])
+    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "gc", "skill", "doctor", "init"])
       expect(r.out).toContain(c);
   });
 
@@ -52,6 +54,20 @@ describe("cli", () => {
   test("usage error exits 2", async () => {
     const r = await wtc(["bogus"]);
     expect(r.code).toBe(2);
+  });
+
+  test("init needs no setup; --json reports created files; second run is SETUP_EXISTS", async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "wtc-cli-init-")), "demo");
+    try {
+      const r = await wtc(["init", dir, "--json"], { WTC_SETUP: "" });
+      expect(r.code).toBe(0);
+      expect(JSON.parse(r.out)).toMatchObject({ dir, id: "demo" });
+      const again = await wtc(["init", dir]);
+      expect(again.code).toBe(1);
+      expect(again.err).toContain("already exists");
+    } finally {
+      rmSync(dirname(dir), { recursive: true, force: true });
+    }
   });
 
   test("skill prints SKILL.md; --llms strips frontmatter", async () => {

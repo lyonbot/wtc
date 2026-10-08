@@ -34,6 +34,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc tui` - interactive console for humans (needs a TTY; not for agents): live instance list with state / CPU / memory, create form, action menu (shell, editor, `scripts`, `hostScripts`).
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state.
 - `wtc doctor [--json]` - check runtime, colima mounts, firewall, toolchain.
+- `wtc init [dir] [--id <id>] [--json]` - scaffold a new setup (needs no existing setup; refuses to overwrite).
 - `wtc skill [--llms]` - print this guide.
 
 States: `absent` `stopped` `booting` `ready` `failed`. Names match `^[a-z0-9]+(-[a-z0-9]+)*$`.
@@ -74,6 +75,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | Code | Meaning | Fix |
 |---|---|---|
 | `SETUP_NOT_FOUND` | no `wtc.setup.ts` | pass `--setup <dir>` or set `WTC_SETUP` |
+| `SETUP_EXISTS` | `wtc init` target is a file or already has scaffold files | use a new/empty dir (e.g. `wtc init wtc-setup`) |
 | `SETUP_ID_CONFLICT` | another setup dir already uses this setup `id` | change `id` in `wtc.setup.ts` or `rm` the other setup's instances |
 | `INVALID_MANIFEST` | manifest fails validation / bind source missing | fix `wtc.setup.ts`; check the message paths |
 | `BIND_NOT_SHARED` | bind source not under a runtime-shared dir (colima: under `$HOME`) | move the source under `$HOME` |
@@ -82,7 +84,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `NOT_FOUND` | instance does not exist | `wtc ls`; `wtc up <name>` |
 | `NOT_RUNNING` | instance is not running | `wtc start <name>` or `wtc up <name>` |
 | `SCRIPT_NOT_FOUND` | script not in manifest `scripts` | check `wtc.setup.ts` |
-| `INVALID_ID` | bad instance/setup id | lowercase letters, digits, single hyphens (e.g. `feat-a`) |
+| `INVALID_ID` | bad instance/setup id (incl. `wtc init --id`) | lowercase letters, digits, single hyphens (e.g. `feat-a`) |
 | `PARAM_INVALID` | `--set` value fails the param's pattern | pass a matching value |
 | `PARAMS_MISMATCH` | explicit `--set`/create-time value differs from how the instance was created | `wtc rm <name>` then `wtc up` with the new value |
 | `PARAM_REQUIRED` | required param missing | pass `--set K=V` |

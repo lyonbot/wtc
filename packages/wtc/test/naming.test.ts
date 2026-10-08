@@ -17,7 +17,7 @@ describe("naming", () => {
   test("labels and versions", () => {
     expect(LABEL.setup).toBe("wtc.setup");
     expect(LABEL.scope).toBe("wtc.scope");
-    expect(WTC_VERSION).toBe("0.1.0");
+    expect(WTC_VERSION).toBe("0.1.1");
     expect(PROTOCOL_VERSION).toBe(1);
   });
   test("assertId rejects bad ids", () => {

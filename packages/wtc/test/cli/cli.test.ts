@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 
 const main = join(import.meta.dir, "../../src/cli/main.ts");
 const fixture = join(import.meta.dir, "../fixtures/basic");
-async function wtc(args: string[], env: Record<string, string> = {}) {
-  const p = Bun.spawn(["bun", main, ...args], { stdout: "pipe", stderr: "pipe", env: { ...process.env, WTC_FAKE_RUNTIME: "1", ...env } });
+async function wtc(args: string[], env: Record<string, string> = {}, cwd?: string) {
+  const p = Bun.spawn(["bun", main, ...args], { stdout: "pipe", stderr: "pipe", cwd, env: { ...process.env, WTC_FAKE_RUNTIME: "1", ...env } });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   return { out, err, code };
 }
@@ -25,6 +25,16 @@ describe("cli", () => {
     const r = await wtc(["--help"]);
     for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "gc", "skill", "doctor", "init"])
       expect(r.out).toContain(c);
+  });
+
+  test("bare wtc without a terminal prints help instead of opening the TUI", async () => {
+    const r = await wtc([], { WTC_SETUP: fixture });
+    expect(r.out + r.err).toContain("Usage: wtc");
+    const s = await wtc(["--setup", fixture], {});
+    expect(s.out + s.err).toContain("Usage: wtc");
+    const n = await wtc([], { WTC_SETUP: "" }, "/"); // no setup: the `wtc init` hint is for terminals only
+    expect(n.out + n.err).toContain("Usage: wtc");
+    expect(n.err).not.toContain("no wtc.setup.ts found");
   });
 
   test("ls --json with fake runtime prints []", async () => {

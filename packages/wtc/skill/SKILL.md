@@ -31,7 +31,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc agent <name> <agent> [-- args]` - run Claude Code (`claude`), Codex (`codex`) or a custom agent defined under manifest `agents` in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<agent>`.
 - `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
-- `wtc tui` - interactive console for humans (needs a TTY; not for agents): live instance list with state / CPU / memory, create form, action menu (shell, editor, `scripts`, `hostScripts`).
+- `wtc tui` (also bare `wtc` / `wtc --setup <dir>` in a terminal, unless `WTC_NO_TUI`, `CI`, `NONINTERACTIVE`, `TERM=dumb` or an agent marker such as `CLAUDECODE` is set) - interactive console for humans (needs a TTY; never run it as an agent): live instance list with state / CPU / memory, create form, action menu (shell, editor, `scripts`, `hostScripts`).
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state; exit 1 if the store prune fails.
 - `wtc doctor [--json]` - check runtime, colima mounts, toolchain; warn (not fail) when `NO_PROXY`/`no_proxy` bypasses the tunnel for localhost.
 - `wtc init [dir] [--id <id>] [--json]` - scaffold a new setup (needs no existing setup; refuses to overwrite).

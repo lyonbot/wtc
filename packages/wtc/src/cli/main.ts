@@ -6,6 +6,7 @@ import { findLocalWtc, runForwarded } from "../../bin/forward.js";
 import skillMd from "../../skill/SKILL.md" with { type: "text" };
 import { runTui } from "../tui/app";
 import { createTerm } from "../tui/term";
+import { defaultArgs } from "./interactive";
 import { renderLs, renderSummary, table, upRenderer } from "./render";
 
 /** Virtual modules so a user's wtc.setup.ts can import `defineSetup` without installing the package (also in the compiled binary). */
@@ -203,12 +204,20 @@ export function buildProgram(): Command {
   return p;
 }
 
+/** Bare `wtc` (or just `--setup <dir>`) opens the console when interactive; see defaultArgs. An injected `load` (tests) disables it. */
+function withDefaultTui(argv: string[]): string[] {
+  if (loader !== defaultLoader) return argv;
+  const r = defaultArgs(argv.slice(2), { env: process.env, tty: { stdin: !!process.stdin.isTTY, stdout: !!process.stdout.isTTY }, cwd: process.cwd() });
+  if (r.hint) console.error(r.hint + "\n");
+  return [...argv.slice(0, 2), ...r.args];
+}
+
 /** Run the CLI; returns the exit code. `load` is injectable for tests. */
 export async function runCli(argv: string[], load?: Loader): Promise<number> {
   loader = load ?? defaultLoader;
   exitCode = 0;
   try {
-    await buildProgram().parseAsync(argv);
+    await buildProgram().parseAsync(withDefaultTui(argv));
     return exitCode;
   } catch (e) {
     if (e instanceof CommanderError) return e.exitCode === 0 ? 0 : 2;

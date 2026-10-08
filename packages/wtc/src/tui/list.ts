@@ -65,6 +65,6 @@ export function renderList(v: ListView, w: number, h: number): string[] {
   });
   while (out.length < h - 2) out.push("");
   out.push(v.msg ? st.yellow(v.msg) : "");
-  out.push(st.dim("type to filter · ↑↓ select · Enter menu · Esc clear / quit · Ctrl-C quit"));
+  out.push(st.dim("type to filter · ↑↓ select · Enter menu · Esc clear/quit · wtc --help: CLI"));
   return out.map((l) => fit(l, w));
 }

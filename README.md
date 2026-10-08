@@ -58,6 +58,8 @@ wtc run feat-a restart-dev-server
 wtc rm feat-a                 # runs the setup's preRemove guard first
 ```
 
+Bare `wtc` (or `wtc --setup <dir>`) opens the console in an interactive terminal with a resolvable setup; it prints help when piped, in CI or agent shells, or with `WTC_NO_TUI=1` (full list: [src/cli/interactive.ts](packages/wtc/src/cli/interactive.ts)).
+
 The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest `wtc.setup.ts` above the current directory.
 
 If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version, that one runs instead, except for `init` (set `WTC_NO_FORWARD=1` to disable).
@@ -76,7 +78,7 @@ If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version
 | `run <name> <script>`, `check <name>`, `shell <name>` | run a setup script or health checks, or open a shell |
 | `agent <name> <claude\|codex\|custom> [-- args]` | run Claude Code / Codex (or a custom agent from `wtc.setup.ts`) inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
-| `tui` | interactive console: live list (state, CPU, memory), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |
+| `tui` (or bare `wtc` in a terminal) | interactive console: live list (state, CPU, memory), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |
 | `build`, `gc`, `doctor`, `skill` | image build, cleanup, environment check, agent guide |
 
 Most commands take `--json`. The full reference with flags and error codes is [packages/wtc/skill/SKILL.md](packages/wtc/skill/SKILL.md).

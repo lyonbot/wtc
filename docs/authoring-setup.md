@@ -154,7 +154,7 @@ flowchart LR
 - Restrict with `socksBind: "127.0.0.1"` or require credentials with `socksAuth: { user, pass }` (plain text in the manifest; also passed as env to the container).
 - Both are creation-time settings: change requires `wtc rm` and `up`.
 - The tunnel address is **dynamic by design**: the port is picked from `socksHostPortRange` at creation and may differ after `rm` + `up`. Clients get the current one from `wtc tunnel`. Pin it with `socksHostPort` only if something truly needs a fixed port.
-- Clients must use `socks5h://` and drop `localhost` from `NO_PROXY` (`wtc tunnel` prints hints).
+- Clients must use `socks5h://` and drop `localhost` from `NO_PROXY` / `no_proxy` (`wtc tunnel` and `wtc doctor` flag it; matching in [packages/wtc/src/ops/common.ts](../packages/wtc/src/ops/common.ts)).
 - On macOS the firewall must allow `limactl` for LAN access.
 
 ## See also

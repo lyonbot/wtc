@@ -9,6 +9,7 @@ import { tunnel } from "../../src/ops/tunnel";
 import { open } from "../../src/ops/open";
 import { gc } from "../../src/ops/gc";
 import { doctor } from "../../src/ops/doctor";
+import { noProxyLoopback } from "../../src/ops/common";
 import { computeImageHash } from "../../src/setup/image-hash";
 import { collect, err, mkCtx } from "../instance/helpers";
 
@@ -86,14 +87,26 @@ describe("run / check / shell", () => {
   });
 });
 
+/** Run f with exactly these NO_PROXY / no_proxy values (both cleared first, restored after). */
+const withEnv = async (env: Record<string, string | undefined>, f: () => Promise<void>) => {
+  const keys = ["NO_PROXY", "no_proxy"];
+  const old = keys.map((k) => process.env[k]);
+  for (const k of keys) delete process.env[k];
+  for (const [k, v] of Object.entries(env)) if (v !== undefined) process.env[k] = v;
+  try { await f(); } finally { keys.forEach((k, i) => (old[i] === undefined ? delete process.env[k] : (process.env[k] = old[i]!))); }
+};
+
+describe("noProxyLoopback", () => {
+  test("both vars, case, ports, leading dots, *, CIDR", () => {
+    expect(noProxyLoopback({ NO_PROXY: "", no_proxy: "LOCALHOST" })).toEqual(["LOCALHOST"]); // empty NO_PROXY must not shadow no_proxy
+    expect(noProxyLoopback({ NO_PROXY: "localhost:3000, .localhost,*.localhost, *" })).toEqual(["localhost:3000", ".localhost", "*.localhost", "*"]);
+    expect(noProxyLoopback({ NO_PROXY: "127.0.0.0/8,0.0.0.0/0,10.0.0.0/8,127.0.0.1/32,128.0.0.0/1" })).toEqual(["127.0.0.0/8", "0.0.0.0/0", "127.0.0.1/32"]);
+    expect(noProxyLoopback({ NO_PROXY: ".local,notlocalhost.com,127.0.0.10,localhost.example.com", no_proxy: "127.0.0.1/40" })).toEqual([]);
+    expect(noProxyLoopback({ NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" })).toEqual(["127.0.0.1"]);
+  });
+});
+
 describe("tunnel", () => {
-  const withEnv = async (env: Record<string, string | undefined>, f: () => Promise<void>) => {
-    const keys = ["NO_PROXY", "no_proxy"];
-    const old = keys.map((k) => process.env[k]);
-    for (const k of keys) delete process.env[k];
-    for (const [k, v] of Object.entries(env)) if (v !== undefined) process.env[k] = v;
-    try { await f(); } finally { keys.forEach((k, i) => (old[i] === undefined ? delete process.env[k] : (process.env[k] = old[i]!))); }
-  };
   test("socks5h hint always; NO_PROXY and LAN hints conditional", async () => {
     const t = setup();
     await created(t);
@@ -210,6 +223,7 @@ describe("gc", () => {
     expect(names).not.toContain("volume:wtc-demo--live.v.pg");
     expect(r.removed.filter((x) => x.kind === "log").map((x) => x.name).sort()).toEqual(["log/live/init.20260101.log", "log/live/init.20260102.log"]);
     expect(r.storePruned).toBe(false);
+    expect(r.store).toBe("would-prune");
     expect(t.rt.calls.slice(before).map((c) => c.op).filter((o) => ["volumeRm", "imageRm", "runOnce", "rm"].includes(o))).toEqual([]);
     expect(existsSync(join(t.dir, ".wtc", "run", "ghost"))).toBe(true);
   });
@@ -217,6 +231,7 @@ describe("gc", () => {
     const { t, hash } = await scenario();
     const r = await gc(t.ctx, { pruneStore: true });
     expect(r.storePruned).toBe(true);
+    expect(r.store).toBe("pruned");
     expect(existsSync(join(t.dir, ".wtc", "run", "ghost"))).toBe(false);
     expect(existsSync(join(t.dir, ".wtc", "log", "ghost"))).toBe(false);
     expect(t.rt.volumes.has("wtc-demo--ghost.v.pg")).toBe(false);
@@ -229,6 +244,15 @@ describe("gc", () => {
     expect(ro.mounts[0]!.source).toBe("wtc-demo.pnpm");
     expect(ro.env.PNPM_CONFIG_STORE_DIR).toBe("/pnpm/store");
   });
+  test("prune-store outcome: same in dry-run and real run when the image is missing; failure reported", async () => {
+    const t = setup();
+    expect((await gc(t.ctx)).store).toBeUndefined();
+    expect((await gc(t.ctx, { dryRun: true, pruneStore: true })).store).toBe("no-image");
+    expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "no-image", storePruned: false });
+    t.rt.images.push({ ref: `wtc-demo:${await computeImageHash(t.ctx.setup)}`, id: "i" });
+    t.rt.execHandler = () => ({ exitCode: 1, stdout: "", stderr: "ERR_PNPM" });
+    expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "failed", storePruned: false });
+  });
 });
 
 describe("doctor", () => {
@@ -237,6 +261,20 @@ describe("doctor", () => {
     const r = await doctor(t.ctx);
     expect(r.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["runtime", "platform", "setup-dir", "allowBuilds"]));
     expect(r.checks.find((c) => c.name === "runtime")!.ok).toBe(true);
+  });
+  test("no-proxy warns (without failing) on a localhost bypass in either var", async () => {
+    const t = setup();
+    const np = async () => (await doctor(t.ctx)).checks.find((c) => c.name === "no-proxy")!;
+    await withEnv({ NO_PROXY: "foo.com", no_proxy: "foo.com, LOCALHOST:3000" }, async () => {
+      const c = await np();
+      expect(c.ok).toBe(true);
+      expect(c.detail).toStartWith("warn: ");
+      expect(c.detail).toContain("LOCALHOST:3000");
+      expect(c.hint).toContain("NO_PROXY= no_proxy=");
+    });
+    await withEnv({ NO_PROXY: "foo.com" }, async () => {
+      expect(await np()).toEqual({ name: "no-proxy", ok: true, detail: "no localhost bypass" });
+    });
   });
   test("runtime down -> ok false with hint, no throw", async () => {
     const t = setup();

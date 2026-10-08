@@ -39,6 +39,13 @@ describe("cli", () => {
     expect(r.out).toContain("no instances");
   });
 
+  test("gc --prune-store reports the store outcome instead of `nothing to clean`", async () => {
+    const r = await wtc(["gc", "--dry-run", "--prune-store"], { WTC_SETUP: fixture });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("skipped pnpm store prune: current image not built");
+    expect(r.out).not.toContain("nothing to clean");
+  });
+
   test("WtcError -> stderr, exit 1", async () => {
     const r = await wtc(["tunnel", "nope"], { WTC_SETUP: fixture });
     expect(r.code).toBe(1);

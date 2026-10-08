@@ -9,7 +9,7 @@ export type GcItem = { kind: "dir" | "volume" | "image" | "log"; name: string };
 const KEEP_LOGS = 5;
 const list = (d: string) => readdir(d).catch(() => [] as string[]);
 
-/** Remove orphaned state (spec §11). `dryRun` only reports. */
+/** Remove orphaned state (spec §11). `dryRun` only reports. `store` is set iff `pruneStore` was requested. */
 export async function gc(ctx: InstanceContext, o: { dryRun?: boolean; pruneStore?: boolean } = {}) {
   const { rt, setup } = ctx;
   const id = setup.manifest.id;
@@ -52,21 +52,26 @@ export async function gc(ctx: InstanceContext, o: { dryRun?: boolean; pruneStore
       await del({ kind: "log", name: `log/${n}/${f}` }, () => rm(join(dir, f), { force: true }));
   }
 
-  let storePruned = false;
-  if (o.pruneStore && !o.dryRun && (await hasImage(ctx, current))) {
-    const r = await rt.runOnce({
-      image: current,
-      cmd: ["bash", "-lc", "flock -x /pnpm/.wtc-lock pnpm store prune"],
-      mounts: [{ type: "volume", source: pnpmVolume(id), target: "/pnpm" }],
-      // same vars as kit/bin/wtc-entry (which picks one GVS var by pnpm version); setting both is harmless
-      env: {
-        PNPM_CONFIG_STORE_DIR: "/pnpm/store",
-        PNPM_CONFIG_CACHE_DIR: "/pnpm/cache",
-        PNPM_CONFIG_VIRTUAL_STORE_TYPE: "global",
-        PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE: "true",
-      },
-    });
-    storePruned = r.exitCode === 0;
+  // decided before acting so a dry run reports exactly what a real run would do (prune needs the current image)
+  let store: "pruned" | "would-prune" | "no-image" | "failed" | undefined;
+  if (o.pruneStore) {
+    if (!(await hasImage(ctx, current))) store = "no-image";
+    else if (o.dryRun) store = "would-prune";
+    else {
+      const r = await rt.runOnce({
+        image: current,
+        cmd: ["bash", "-lc", "flock -x /pnpm/.wtc-lock pnpm store prune"],
+        mounts: [{ type: "volume", source: pnpmVolume(id), target: "/pnpm" }],
+        // same vars as kit/bin/wtc-entry (which picks one GVS var by pnpm version); setting both is harmless
+        env: {
+          PNPM_CONFIG_STORE_DIR: "/pnpm/store",
+          PNPM_CONFIG_CACHE_DIR: "/pnpm/cache",
+          PNPM_CONFIG_VIRTUAL_STORE_TYPE: "global",
+          PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE: "true",
+        },
+      });
+      store = r.exitCode === 0 ? "pruned" : "failed";
+    }
   }
-  return { removed, storePruned };
+  return { removed, storePruned: store === "pruned", ...(store ? { store } : {}) };
 }

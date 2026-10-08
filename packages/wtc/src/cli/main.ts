@@ -166,9 +166,13 @@ export function buildProgram(): Command {
     .action(act(async (w, cmd) => {
       const o = cmd.opts();
       const r = await w.gc({ dryRun: !!o.dryRun, pruneStore: !!o.pruneStore });
-      if (o.json) return void json(r);
-      for (const i of r.removed) console.log(`${o.dryRun ? "would remove" : "removed"} ${i.kind} ${i.name}`);
-      if (!r.removed.length) console.log("nothing to clean");
+      if (o.json) json(r);
+      else {
+        for (const i of r.removed) console.log(`${o.dryRun ? "would remove" : "removed"} ${i.kind} ${i.name}`);
+        if (r.store) console.log({ pruned: "pruned pnpm store", "would-prune": "would prune pnpm store", "no-image": "skipped pnpm store prune: current image not built (`wtc build`)", failed: "pnpm store prune failed" }[r.store]);
+        else if (!r.removed.length) console.log("nothing to clean");
+      }
+      return r.store === "failed" ? 1 : 0;
     }));
 
   p.command("doctor").description("check runtime and environment").option("--json", jopt)
@@ -177,7 +181,7 @@ export function buildProgram(): Command {
       if (cmd.opts().json) json(r);
       else {
         console.log(table(r.checks.map((c) => [c.ok ? "✔" : "✖", c.name, c.detail])));
-        for (const c of r.checks) if (!c.ok && c.hint) console.log(`hint (${c.name}): ${c.hint}`);
+        for (const c of r.checks) if (c.hint) console.log(`hint (${c.name}): ${c.hint}`); // ok checks may carry a warning hint
       }
       return r.checks.every((c) => c.ok) ? 0 : 1;
     }));

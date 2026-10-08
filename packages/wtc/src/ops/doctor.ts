@@ -4,6 +4,7 @@ import type { InstanceContext } from "../instance/instance";
 import { imageRef } from "../naming";
 import { computeImageHash } from "../setup/image-hash";
 import { hasImage } from "./build";
+import { noProxyLoopback } from "./common";
 
 export interface DoctorCheck { name: string; ok: boolean; detail: string; hint?: string }
 
@@ -55,6 +56,15 @@ export async function doctor(ctx: InstanceContext): Promise<{ checks: DoctorChec
       add("toolchain", false, msg(e));
     }
   }
+
+  // warning, not a failure: it only affects host clients of `wtc tunnel`, and is fixed per command
+  const bypass = noProxyLoopback();
+  add(
+    "no-proxy",
+    true,
+    bypass.length ? `warn: NO_PROXY/no_proxy has ${bypass.join(", ")}; tunnel clients skip the proxy for localhost` : "no localhost bypass",
+    bypass.length ? "clear both for tunnel clients, e.g. `NO_PROXY= no_proxy= curl --socks5-hostname ...`" : undefined,
+  );
 
   add("allowBuilds", true, "info: pnpm 11 blocks dependency build scripts unless allowed via `allowBuilds` in pnpm-workspace.yaml");
   return { checks };

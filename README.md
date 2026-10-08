@@ -40,7 +40,7 @@ git clone https://github.com/lyonbot/wtc.git && cd wtc
 bun install
 bun run build          # -> dist/wtc: single binary with the container kit embedded
 cp dist/wtc ~/.local/bin/   # or anywhere on your PATH
-wtc doctor             # checks docker, colima mounts / agent forwarding, toolchain
+wtc doctor             # checks docker, colima mounts / agent forwarding, toolchain; warns on NO_PROXY localhost bypass
 ```
 
 ## Quickstart
@@ -53,7 +53,7 @@ wtc up feat-a                 # build image, create container, block until ready
 wtc up feat-b --set APP_GREETING=hi
 wtc ls                        # NAME STATE PHASE SOCKS IMAGE
 wtc tunnel feat-a             # prints socks5h://<ip>:<port> URLs
-NO_PROXY= curl --socks5-hostname <ip:port from tunnel> http://127.0.0.1:5173/   # -> hello from feat-a
+NO_PROXY= no_proxy= curl --socks5-hostname <ip:port from tunnel> http://127.0.0.1:5173/   # -> hello from feat-a
 wtc run feat-a restart-dev-server
 wtc rm feat-a                 # runs the setup's preRemove guard first
 ```
@@ -62,7 +62,7 @@ The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest 
 
 If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version, that one runs instead, except for `init` (set `WTC_NO_FORWARD=1` to disable).
 
-**The tunnel address is dynamic.** Run `wtc tunnel <name>` whenever you need it; don't hardcode the port. Always use `socks5h://`, which resolves DNS inside the container. Also make sure `localhost` / `127.0.0.1` is not in the client's `NO_PROXY`, or it will skip the proxy.
+**The tunnel address is dynamic.** Run `wtc tunnel <name>` whenever you need it; don't hardcode the port. Always use `socks5h://`, which resolves DNS inside the container. Also make sure `localhost` / `127.0.0.1` is not in the client's `NO_PROXY` or `no_proxy`, or it will skip the proxy (`wtc doctor` warns).
 
 ## Commands
 

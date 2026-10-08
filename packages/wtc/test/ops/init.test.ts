@@ -1,3 +1,4 @@
+import "../../src/cli/main"; // registers the virtual @lyonbot/wtc modules the scaffolded setup imports
 import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

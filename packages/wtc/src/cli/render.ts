@@ -45,3 +45,13 @@ export function upRenderer(name: string) {
     return [`▸ ${s.state}${s.phase ? ` (phase ${s.phase})` : ""}`];
   };
 }
+
+/** Both script sections of `wtc run` without a script: container `scripts` and host `hostScripts`. */
+export function renderScripts(m: { scripts: Record<string, { description: string }>; hostScripts: Record<string, { description: string }> }): string {
+  const section = (title: string, o: Record<string, { description: string }>) =>
+    `${title}\n${Object.keys(o).length ? table(Object.entries(o).map(([k, v]) => ["  " + k, v.description])) : "  (none)"}`;
+  return [
+    section("scripts (in the container): wtc run <name> <script> [-- args]", m.scripts),
+    section("host scripts (on this machine): wtc run --host <name> <script> [-- args]", m.hostScripts),
+  ].join("\n\n");
+}

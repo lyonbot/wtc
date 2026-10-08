@@ -55,6 +55,8 @@ wtc ls                        # NAME STATE PHASE SOCKS IMAGE
 wtc tunnel feat-a             # prints socks5h://<ip>:<port> URLs
 NO_PROXY= no_proxy= curl --socks5-hostname <ip:port from tunnel> http://127.0.0.1:5173/   # -> hello from feat-a
 wtc run feat-a restart-dev-server
+wtc run --host feat-a show-url   # a `hostScripts` entry, runs on this machine
+wtc run                          # list all scripts, both kinds
 wtc rm feat-a                 # runs the setup's preRemove guard first
 ```
 
@@ -75,7 +77,7 @@ If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version
 | `start` / `stop` / `restart <name>` | stop keeps code and `node_modules`; restart re-runs `init.sh` |
 | `rm <name> [--force]` | `preRemove` guard, then delete container, volumes and state |
 | `ls`, `status <name> [--watch]`, `logs <name> [-f]` | inspect instances and init logs |
-| `run <name> <script>`, `check <name>`, `shell <name>` | run a setup script or health checks, or open a shell |
+| `run [--host] <name> <script>`, `check <name>`, `shell <name>` | run a setup script (in the container, or a `hostScripts` entry on the host with `--host`; bare `run` lists both), health checks, or open a shell |
 | `agent <name> <claude\|codex\|custom> [-- args]` | run Claude Code / Codex (or a custom agent from `wtc.setup.ts`) inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
 | `tui` (or bare `wtc` in a terminal) | interactive console: live list (state, CPU, memory), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |

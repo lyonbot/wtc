@@ -37,6 +37,31 @@ describe("cli", () => {
     expect(n.err).not.toContain("no wtc.setup.ts found");
   });
 
+  test("run without a script lists container and host scripts", async () => {
+    const ex = join(import.meta.dir, "../../../../examples/setup-basic");
+    const r = await wtc(["run"], { WTC_SETUP: ex });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("restart-dev-server");
+    expect(r.out).toContain("wtc run --host");
+    expect(r.out).toContain("show-url");
+    const j = JSON.parse((await wtc(["run", "x", "--json"], { WTC_SETUP: ex })).out);
+    expect(j.scripts.map((s: { name: string }) => s.name)).toContain("restart-dev-server");
+    expect(j.hostScripts).toContainEqual({ name: "show-url", description: "print how to reach the dev server" });
+  });
+
+  test("run on the wrong side hints at --host", async () => {
+    const ex = join(import.meta.dir, "../../../../examples/setup-basic");
+    const r = await wtc(["run", "x", "show-url"], { WTC_SETUP: ex });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("wtc run --host x show-url");
+    const h = await wtc(["run", "--host", "x", "restart-dev-server"], { WTC_SETUP: ex });
+    expect(h.code).toBe(1);
+    expect(h.err).toContain('no host script "restart-dev-server"');
+    expect(h.err).toContain("wtc run x restart-dev-server");
+    const n = await wtc(["run", "x", "nope"], { WTC_SETUP: ex });
+    expect(n.err).toContain("hint: `wtc run` lists all scripts");
+  });
+
   test("ls --json with fake runtime prints []", async () => {
     const r = await wtc(["ls", "--json"], { WTC_SETUP: fixture });
     expect(r.code).toBe(0);

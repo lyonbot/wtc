@@ -61,6 +61,31 @@ describe("cli in-process", () => {
     expect(c.args[1]).toEqual(["bash", "-lc", 'x "$@"', "s", "-x"]);
   });
 
+  test("run: --host routes to runHost; flags after -- reach the script; --json with a script is a usage error", async () => {
+    const { load } = await withInstance();
+    const w = await load();
+    const calls: unknown[][] = [];
+    w.run = async (...a) => { calls.push(["run", ...a]); return 0; };
+    w.runHost = async (...a) => { calls.push(["host", ...a]); return 4; };
+    expect((await capture(() => runCli(["bun", "wtc", "run", "--host", "a", "h", "--", "x", "y"], load))).code).toBe(4);
+    expect((await capture(() => runCli(["bun", "wtc", "run", "a", "s", "--", "--json", "--host", "--foo"], load))).code).toBe(0);
+    expect(calls).toEqual([["host", "a", "h", ["x", "y"]], ["run", "a", "s", ["--json", "--host", "--foo"]]]);
+    const j = await capture(() => runCli(["bun", "wtc", "run", "a", "s", "--json"], load));
+    expect(j.code).toBe(2);
+    expect(j.err).toContain("--json only applies to listing");
+    expect(calls.length).toBe(2);
+  });
+
+  test("run --host on a missing instance: NOT_FOUND with the wtc up hint", async () => {
+    const dir = mkSetup();
+    writeFileSync(join(dir, "wtc.setup.ts"), `export default { id: "clitest", hostScripts: { h: { run: "true", description: "d" } } };\n`);
+    const w = await createWtc({ setupDir: dir, runtime: new FakeRuntime(), cacheDir: join(tmp, "cache") });
+    const r = await capture(() => runCli(["bun", "wtc", "run", "--host", "ghost", "h"], async () => w));
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("instance ghost does not exist");
+    expect(r.err).toContain("hint: wtc up ghost");
+  });
+
   test("agent: passes the agent name, args after -- and the exit code through", async () => {
     const { load } = await withInstance();
     const w = await load();

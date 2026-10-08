@@ -7,7 +7,7 @@ import skillMd from "../../skill/SKILL.md" with { type: "text" };
 import { runTui } from "../tui/app";
 import { createTerm } from "../tui/term";
 import { defaultArgs } from "./interactive";
-import { renderLs, renderSummary, table, upRenderer } from "./render";
+import { renderLs, renderScripts, renderSummary, table, upRenderer } from "./render";
 
 /** Virtual modules so a user's wtc.setup.ts can import `defineSetup` without installing the package (also in the compiled binary). */
 Bun.plugin({
@@ -118,9 +118,22 @@ export function buildProgram(): Command {
         process.stdout.write(l.endsWith("\n") ? l : l + "\n");
     }));
 
-  p.command("run <name> <script> [args...]").description("run a manifest script in the container (args after --)")
+  p.command("run [name] [script] [args...]").description("run a manifest script in the container, or on the host with --host; without a script, list all scripts (args after --)")
+    .option("--host", "run a hostScripts entry on this machine instead of a scripts entry in the container").option("--json", "with no script: print the list as JSON")
     .allowUnknownOption()
-    .action(act(async (w, _c, name: string, script: string, args: string[]) => w.run(name, script, args ?? [])));
+    .action(act(async (w, cmd, name: string | undefined, script: string | undefined, args: string[]) => {
+      const m = w.setup.manifest;
+      if (!script) {
+        const list = (o: Record<string, { description: string }>) => Object.entries(o).map(([k, v]) => ({ name: k, description: v.description }));
+        if (cmd.opts().json) json({ scripts: list(m.scripts), hostScripts: list(m.hostScripts) });
+        else console.log(renderScripts(m));
+        return 0;
+      }
+      if (!name) throw new UsageError("run needs an instance name before the script");
+      // Known flags are parsed anywhere before `--`; refuse a --json that would otherwise be silently dropped.
+      if (cmd.opts().json) throw new UsageError("--json only applies to listing (no script); pass script flags after --");
+      return cmd.opts().host ? w.runHost(name, script, args ?? []) : w.run(name, script, args ?? []);
+    }));
 
   p.command("check <name>").description("run health checks now").option("--json", jopt)
     .action(act(async (w, cmd, name: string) => {

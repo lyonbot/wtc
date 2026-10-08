@@ -22,7 +22,7 @@ export async function runHost(ctx: InstanceContext, name: string, script: string
   const hs = m.hostScripts[script];
   if (!hs) {
     const avail = Object.keys(m.hostScripts).join(", ") || "(none)";
-    throw new WtcError("SCRIPT_NOT_FOUND", `no host script "${script}"; available: ${avail}`);
+    throw new WtcError("SCRIPT_NOT_FOUND", `no host script "${script}"; available: ${avail}`, script in m.scripts ? `"${script}" runs in the container: wtc run ${name} ${script}` : "`wtc run` lists all scripts");
   }
   await mustExist(ctx, name);
   const env = {

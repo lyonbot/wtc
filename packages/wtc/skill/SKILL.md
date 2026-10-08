@@ -25,7 +25,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc ls [--json]` - NAME STATE PHASE SOCKS IMAGE.
 - `wtc status <name> [--watch] [--json]` - state, phase, health, socks, `staleImage`.
 - `wtc logs <name> [-f] [--boot <id>]` - init logs.
-- `wtc run <name> <script> [-- args]` - manifest script in the container; exits with its exit code.
+- `wtc run [<name>] [--host] [<script>] [-- args]` - manifest script in the container (`scripts`), or on the host with `--host` (`hostScripts`; arbitrary host shell, not sandboxed); exits with its exit code. Without a script it lists both sections (`--json`: `{scripts, hostScripts}`); a script that exists only on the other side fails with `SCRIPT_NOT_FOUND` and a hint. wtc flags (`--host`, `--json`) go before `--`; everything after `--` reaches the script.
 - `wtc check <name> [--json]` - run health checks now.
 - `wtc shell <name>` - interactive shell (needs a TTY; exits with the shell's code).
 - `wtc agent <name> <agent> [-- args]` - run Claude Code (`claude`), Codex (`codex`) or a custom agent defined under manifest `agents` in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<agent>`.
@@ -50,7 +50,7 @@ States: `absent` `stopped` `booting` `ready` `failed`. Names match `^[a-z0-9]+(-
 2. `curl --socks5-hostname 127.0.0.1:<port> http://127.0.0.1:5173/`.
 3. Always `socks5h` (DNS in container). Unset `NO_PROXY`/`no_proxy` entries for `localhost`/`127.0.0.1` for that client, otherwise it bypasses the proxy and hits the host's own port.
 
-**Run a script**: `wtc run feat-x test -- --watch=false`; the exit code is the script's.
+**Run a script**: `wtc run feat-x test -- --watch=false`; the exit code is the script's. Not sure what exists: `wtc run` lists container and host scripts.
 
 **Delegate to an agent inside the container**: `wtc agent feat-x claude -- -p "run the tests and fix failures"` (or `wtc agent feat-x codex -- exec "…"`). Put agent flags after `--`.
 
@@ -84,7 +84,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `RUNTIME_ERROR` | docker command failed | read the message; run `wtc doctor` |
 | `NOT_FOUND` | instance does not exist | `wtc ls`; `wtc up <name>` |
 | `NOT_RUNNING` | instance is not running | `wtc start <name>` or `wtc up <name>` |
-| `SCRIPT_NOT_FOUND` | script not in manifest `scripts` | check `wtc.setup.ts` |
+| `SCRIPT_NOT_FOUND` | script not in manifest `scripts` (or `hostScripts` with `--host`) | `wtc run` lists both; follow the hint |
 | `INVALID_ID` | bad instance/setup id (incl. `wtc init --id`) | lowercase letters, digits, single hyphens (e.g. `feat-a`) |
 | `PARAM_INVALID` | `--set` value fails the param's pattern | pass a matching value |
 | `PARAMS_MISMATCH` | explicit `--set`/create-time value differs from how the instance was created | `wtc rm <name>` then `wtc up` with the new value |
@@ -108,5 +108,6 @@ An instance in `failed` state keeps its container: debug (see flow above), then 
 
 - `wtc rm` runs the manifest `preRemove` (e.g. unpushed-work check) and refuses on non-zero. `--force` skips it and deletes instance volumes: unpushed work is lost. Never use `--force` without the user's consent.
 - SOCKS has no auth unless the manifest sets `socksAuth`. With the default bind `0.0.0.0`, anyone on the LAN can use it to reach the container's `127.0.0.1`, the host (`host.docker.internal`) and any network the container reaches. Prefer `--socks-bind 127.0.0.1` on untrusted networks; the bind is fixed at creation (`rm` + `up` to change).
+- `wtc run --host` executes arbitrary manifest shell on the host, unsandboxed, as the current user. Only for setups you trust.
 - `wtc agent` copies the host's agent credentials into the container and skips permission prompts: code in the container can read them. Use only with trusted repositories.
 - Image changes show as `staleImage: true` (`IMAGE` column `stale`); wtc never rebuilds instances automatically.

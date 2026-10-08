@@ -1,6 +1,6 @@
 {
   "name": "@lyonbot/wtc",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Run one long-lived docker container per git worktree/branch, with shared installs and SOCKS tunnels",
   "license": "MIT",
   "author": "lyonbot",

@@ -116,6 +116,27 @@ describe("cli in-process", () => {
     expect(r.out).toContain("hint: wtc restart a");
   });
 
+  test("gc prints removed items, per-item failures and the store prune error; exit 1 (also with --json)", async () => {
+    const res = {
+      removed: [{ kind: "dir", name: "run/x" }],
+      failed: [{ kind: "image", name: "wtc-s:old", error: "image is in use" }],
+      storePruned: false, store: "failed", storeError: "ERR_PNPM_X boom",
+    };
+    const stub = { gc: async () => res } as unknown as Wtc;
+    const r = await capture(() => runCli(["bun", "wtc", "gc", "--prune-store"], async () => stub));
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("removed dir run/x");
+    expect(r.err).toContain("failed to remove image wtc-s:old: image is in use");
+    expect(r.err).toContain("pnpm store prune failed");
+    expect(r.err).toContain("  | ERR_PNPM_X boom");
+    expect(r.out).not.toContain("nothing to clean");
+    const j = await capture(() => runCli(["bun", "wtc", "gc", "--json"], async () => ({ gc: async () => ({ ...res, store: undefined, storeError: undefined }) }) as unknown as Wtc));
+    expect(j.code).toBe(1);
+    expect(JSON.parse(j.out).failed).toHaveLength(1);
+    const ok = await capture(() => runCli(["bun", "wtc", "gc"], async () => ({ gc: async () => ({ removed: [], failed: [], storePruned: false }) }) as unknown as Wtc));
+    expect(ok).toMatchObject({ code: 0, out: "nothing to clean" });
+  });
+
   test("upRenderer: one line per phase change", () => {
     const r = upRenderer("a");
     const st = (phase: string): UpEvent => ({ type: "status", summary: { name: "a", container: "c", state: "booting", phase, staleImage: false } });

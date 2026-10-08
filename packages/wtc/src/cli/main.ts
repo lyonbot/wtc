@@ -183,10 +183,12 @@ export function buildProgram(): Command {
       if (o.json) json(r);
       else {
         for (const i of r.removed) console.log(`${o.dryRun ? "would remove" : "removed"} ${i.kind} ${i.name}`);
-        if (r.store) console.log({ pruned: "pruned pnpm store", "would-prune": "would prune pnpm store", "no-image": "skipped pnpm store prune: current image not built (`wtc build`)", failed: "pnpm store prune failed" }[r.store]);
-        else if (!r.removed.length) console.log("nothing to clean");
+        for (const f of r.failed) console.error(`failed to remove ${f.kind} ${f.name}: ${f.error}`);
+        if (r.store) (r.store === "failed" ? console.error : console.log)({ pruned: "pruned pnpm store", "would-prune": "would prune pnpm store", "no-image": "skipped pnpm store prune: current image not built (`wtc build`)", failed: "pnpm store prune failed" }[r.store]);
+        if (r.storeError) console.error(r.storeError.split("\n").map((l) => `  | ${l}`).join("\n"));
+        if (!r.store && !r.removed.length && !r.failed.length) console.log("nothing to clean");
       }
-      return r.store === "failed" ? 1 : 0;
+      return r.store === "failed" || r.failed.length ? 1 : 0;
     }));
 
   p.command("doctor").description("check runtime and environment").option("--json", jopt)

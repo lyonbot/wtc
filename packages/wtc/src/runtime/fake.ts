@@ -5,6 +5,8 @@ import type { ContainerInfo, ContainerStats, CreateSpec, ExecOpts, ExecResult, P
 export class FakeRuntime implements Runtime {
   calls: { op: string; args: unknown[] }[] = [];
   failNextStart?: WtcError;
+  /** failure injection: when it returns an error for a call, that call is recorded and then throws it */
+  failOn?: (op: string, args: unknown[]) => WtcError | undefined;
   execHandler?: (name: string, cmd: string[], o?: ExecOpts) => ExecResult;
   platformInfo: PlatformInfo = { kind: "linux", arch: "amd64", hostGatewayFlag: true };
   containers = new Map<string, { info: ContainerInfo; spec: CreateSpec }>();
@@ -20,6 +22,8 @@ export class FakeRuntime implements Runtime {
 
   private rec(op: string, ...args: unknown[]) {
     this.calls.push({ op, args });
+    const e = this.failOn?.(op, args);
+    if (e) throw e;
   }
   private get(name: string) {
     const c = this.containers.get(name);

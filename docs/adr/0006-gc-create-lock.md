@@ -11,3 +11,8 @@
   - Same-host only (pid liveness); the setup dir is host-local anyway.
   - A reused pid makes a stale file look live; the `LOCKED` message names the file so the user can delete it.
   - `rm` is not locked: it deletes the same things gc would.
+
+## Note (2026-10-08): gc hardening
+
+- A failed removal no longer aborts gc: it is reported in `failed` and the run continues; a failed `--prune-store` carries `storeError` (pnpm output tail). Any failure exits 1.
+- gc refuses with `SETUP_ID_CONFLICT` (dry run too) when a container or instance volume of its `id` carries another `wtc.setupDir`: images have no setup-dir label, so gc cannot tell whose they are. Setup-scope volumes are exempt (shared, labelled by their first creator). See [ops/gc.ts](../../packages/wtc/src/ops/gc.ts).

@@ -32,7 +32,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
 - `wtc tui` (also bare `wtc` / `wtc --setup <dir>` in a terminal, unless `WTC_NO_TUI`, `CI`, `NONINTERACTIVE`, `TERM=dumb` or an agent marker such as `CLAUDECODE` is set) - interactive console for humans (needs a TTY; never run it as an agent): live instance list with state / CPU / memory, create form, action menu (shell, editor, `scripts`, `hostScripts`).
-- `wtc gc [--dry-run] [--prune-store]` - remove orphaned state; exit 1 if the store prune fails.
+- `wtc gc [--dry-run] [--prune-store]` - remove orphaned state; continues past a failed removal and lists it (`--json`: `failed[{kind,name,error}]`, `storeError` = pnpm output tail); exit 1 if any removal or the store prune fails. Refuses with `SETUP_ID_CONFLICT` when another setup dir uses the same `id`.
 - `wtc doctor [--json]` - check runtime, colima mounts, toolchain; warn (not fail) when `NO_PROXY`/`no_proxy` bypasses the tunnel for localhost.
 - `wtc init [dir] [--id <id>] [--json]` - scaffold a new setup (needs no existing setup; refuses to overwrite).
 - `wtc skill [--llms]` - print this guide.
@@ -77,7 +77,7 @@ Errors print `error: <message>` and `hint: <hint>` on stderr, exit 1 (usage erro
 | `SETUP_NOT_FOUND` | no `wtc.setup.ts` | pass `--setup <dir>` or set `WTC_SETUP` |
 | `LOCKED` | `wtc gc` and an instance create (`wtc up`) overlap | wait; the message names the lock file (`<setup>/.wtc/lock/*.lock`), delete it only if its pid is gone |
 | `SETUP_EXISTS` | `wtc init` target is a file or already has scaffold files | use a new/empty dir (e.g. `wtc init wtc-setup`) |
-| `SETUP_ID_CONFLICT` | another setup dir already uses this setup `id` | change `id` in `wtc.setup.ts` or `rm` the other setup's instances |
+| `SETUP_ID_CONFLICT` | another setup dir already uses this setup `id` (`up`, `gc`) | change `id` in `wtc.setup.ts` or `rm` the other setup's instances |
 | `INVALID_MANIFEST` | manifest fails validation / bind source missing | fix `wtc.setup.ts`; check the message paths |
 | `BIND_NOT_SHARED` | bind source not under a runtime-shared dir (colima: under `$HOME`) | move the source under `$HOME` |
 | `RUNTIME_UNAVAILABLE` | docker daemon unreachable | start docker/colima; run `wtc doctor` |

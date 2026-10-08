@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { up } from "../../src/instance/instance";
 import { build } from "../../src/ops/build";
@@ -194,6 +194,7 @@ describe("logs", () => {
 });
 
 describe("gc", () => {
+  const locks = (t: ReturnType<typeof setup>) => (existsSync(lockDir(t.dir)) ? readdirSync(lockDir(t.dir)) : []);
   async function scenario() {
     const t = setup();
     await created(t, "live");
@@ -201,8 +202,8 @@ describe("gc", () => {
     // orphan dirs
     for (const k of ["run", "log"]) mkdirSync(join(t.dir, ".wtc", k, "ghost"), { recursive: true });
     // orphan instance volume + live one + setup-scope
-    await t.rt.volumeCreate("wtc-demo--ghost.v.pg", { "wtc.setup": "demo", "wtc.scope": "instance", "wtc.name": "ghost" });
-    await t.rt.volumeCreate("wtc-demo--live.v.pg", { "wtc.setup": "demo", "wtc.scope": "instance", "wtc.name": "live" });
+    await t.rt.volumeCreate("wtc-demo--ghost.v.pg", { "wtc.setup": "demo", "wtc.setupDir": t.dir, "wtc.scope": "instance", "wtc.name": "ghost" });
+    await t.rt.volumeCreate("wtc-demo--live.v.pg", { "wtc.setup": "demo", "wtc.setupDir": t.dir, "wtc.scope": "instance", "wtc.name": "live" });
     // images
     t.rt.images.push({ ref: "wtc-demo:oldhash", id: "x1" }, { ref: "wtc-demo:usedhash", id: "x2" });
     await t.rt.create({ name: "wtc-demo--other", image: "wtc-demo:usedhash", labels: { "wtc.setup": "demo", "wtc.setupDir": t.dir, "wtc.name": "other" }, env: {}, mounts: [], ports: [], entrypoint: [], extraHosts: [] });
@@ -252,11 +253,54 @@ describe("gc", () => {
     expect((await gc(t.ctx, { dryRun: true, pruneStore: true })).store).toBe("no-image");
     expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "no-image", storePruned: false });
     t.rt.images.push({ ref: `wtc-demo:${await computeImageHash(t.ctx.setup)}`, id: "i" });
-    t.rt.execHandler = () => ({ exitCode: 1, stdout: "", stderr: "ERR_PNPM" });
-    expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "failed", storePruned: false });
+    t.rt.execHandler = () => ({ exitCode: 1, stdout: "Removing ...\n", stderr: "ERR_PNPM_X boom\n" });
+    expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "failed", storePruned: false, storeError: "Removing ...\nERR_PNPM_X boom" });
+    t.rt.failOn = (op) => (op === "runOnce" ? new WtcError("RUNTIME_ERROR", "docker run failed") : undefined);
+    expect(await gc(t.ctx, { pruneStore: true })).toMatchObject({ store: "failed", storeError: "docker run failed" });
+  });
+  test("a failed removal does not stop gc: reported in `failed`, the rest still removed; dry-run unchanged", async () => {
+    const { t } = await scenario();
+    const dry = await gc(t.ctx, { dryRun: true });
+    expect(dry.failed).toEqual([]);
+    t.rt.failOn = (op, a) => (op === "volumeRm" || (op === "imageRm" && a[0] === "wtc-demo:oldhash") ? new WtcError("RUNTIME_ERROR", `${op} in use`) : undefined);
+    chmodSync(join(t.dir, ".wtc", "run"), 0o555); // run/ghost cannot be removed
+    try {
+      const r = await gc(t.ctx);
+      const asRoot = process.getuid?.() === 0; // root ignores the read-only parent dir
+      expect(r.failed).toEqual([
+        ...(asRoot ? [] : [{ kind: "dir" as const, name: "run/ghost", error: expect.stringMatching(/EACCES|EPERM/) as string }]),
+        { kind: "volume", name: "wtc-demo--ghost.v.pg", error: "volumeRm in use" },
+        { kind: "image", name: "wtc-demo:oldhash", error: "imageRm in use" },
+      ]);
+      const done = r.removed.map((x) => `${x.kind}:${x.name}`);
+      expect([...done, ...r.failed.map((x) => `${x.kind}:${x.name}`)].sort()).toEqual(dry.removed.map((x) => `${x.kind}:${x.name}`).sort());
+      expect(done).toContain("dir:log/ghost");
+      expect(existsSync(join(t.dir, ".wtc", "log", "ghost"))).toBe(false);
+      expect(readdirSync(join(t.dir, ".wtc", "log", "live")).length).toBe(5);
+    } finally {
+      chmodSync(join(t.dir, ".wtc", "run"), 0o755);
+    }
+  });
+  test("refuses with SETUP_ID_CONFLICT (dry run too) when another setup dir uses the id; touches nothing", async () => {
+    const { t } = await scenario();
+    await t.rt.create({ name: "wtc-demo--x", image: "wtc-demo:otherhash", labels: { "wtc.setup": "demo", "wtc.setupDir": "/elsewhere", "wtc.name": "x" }, env: {}, mounts: [], ports: [], entrypoint: [], extraHosts: [] });
+    for (const o of [{ dryRun: true }, {}]) {
+      const e = await err(gc(t.ctx, o));
+      expect(e).toMatchObject({ code: "SETUP_ID_CONFLICT" });
+      expect(e!.message).toContain("/elsewhere (container wtc-demo--x)");
+    }
+    expect(locks(t)).toEqual([]);
+    t.rt.containers.delete("wtc-demo--x");
+    await t.rt.volumeCreate("wtc-demo--y.v.pg", { "wtc.setup": "demo", "wtc.setupDir": "/elsewhere", "wtc.scope": "instance", "wtc.name": "y" });
+    expect((await err(gc(t.ctx)))!.message).toContain("(volume wtc-demo--y.v.pg)");
+    expect(t.rt.calls.filter((c) => ["volumeRm", "imageRm"].includes(c.op))).toEqual([]);
+    expect(existsSync(join(t.dir, ".wtc", "run", "ghost"))).toBe(true);
+    t.rt.volumes.delete("wtc-demo--y.v.pg");
+    // a setup-scope volume first created by another dir is shared by design, not a conflict
+    await t.rt.volumeCreate("wtc-demo.v.cache", { "wtc.setup": "demo", "wtc.setupDir": "/elsewhere", "wtc.scope": "setup" });
+    expect((await gc(t.ctx)).failed).toEqual([]);
   });
 
-  const locks = (t: ReturnType<typeof setup>) => (existsSync(lockDir(t.dir)) ? readdirSync(lockDir(t.dir)) : []);
   test("up releases its create lease after success and after failure", async () => {
     const t = setup();
     await created(t, "a");

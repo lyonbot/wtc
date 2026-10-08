@@ -2,6 +2,7 @@
 import { Command, CommanderError } from "commander";
 import * as lib from "../index";
 import { createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "../index";
+import { findLocalWtc, runForwarded } from "../../bin/forward.js";
 import skillMd from "../../skill/SKILL.md" with { type: "text" };
 import { runTui } from "../tui/app";
 import { createTerm } from "../tui/term";
@@ -204,4 +205,10 @@ export async function runCli(argv: string[], load?: Loader): Promise<number> {
   }
 }
 
-if (import.meta.main) process.exit(await runCli(process.argv));
+if (import.meta.main) {
+  // Compiled binary: bin/wtc.js is bypassed, so dispatch to the setup-local wtc here too.
+  const args = process.argv.slice(2);
+  const local = findLocalWtc({ argv: args, env: process.env, cwd: process.cwd(), selfVersion: WTC_VERSION });
+  const code = local && (await runForwarded(Bun.which("node") ? "node" : "bun", local.entry, args, process.env));
+  process.exit(code ?? (await runCli(process.argv)));
+}

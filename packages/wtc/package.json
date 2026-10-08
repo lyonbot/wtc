@@ -55,6 +55,7 @@
     "prepack": "bash ../../kit/build.sh && bun scripts/sync-docs.ts && tsc -b ."
   },
   "publishConfig": {
+    "registry": "https://registry.npmjs.org",
     "access": "public"
   }
 }

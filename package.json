@@ -8,6 +8,7 @@
     "build:kit": "bash kit/build.sh",
     "test": "bun test",
     "build": "bun run build:kit && bun build packages/wtc/src/cli/main.ts --compile --outfile dist/wtc",
+    "prepare": "bun run build",
     "typecheck": "tsc -b packages/wtc"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ describe("manifest schema", () => {
       params: {},
       cwd: "/workspace",
       scripts: {},
+      hostScripts: {},
       checks: {},
       socksPort: 1080,
       socksBind: "0.0.0.0",
@@ -26,6 +27,14 @@ describe("manifest schema", () => {
       hooks: {},
       container: { mounts: [], hostForwards: [], env: {}, annotations: {} },
     });
+  });
+  test("hostScripts and param.suggest", () => {
+    const suggest = () => ["a"];
+    const m = ok({ hostScripts: { chrome: { run: "./chrome.sh", description: "open chrome" } }, params: { B: { description: "branch", suggest } } });
+    expect(m.hostScripts.chrome).toEqual({ run: "./chrome.sh", description: "open chrome" });
+    expect(m.params.B!.suggest).toBe(suggest);
+    bad({ hostScripts: { x: { run: "x" } } });
+    bad({ params: { B: { description: "b", suggest: "nope" } } });
   });
   test("container: static object or function; duplicate mount target / WTC_ env / unknown top-level key rejected", () => {
     const fn = () => ({});

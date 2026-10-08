@@ -1,5 +1,5 @@
 import { WtcError } from "../errors";
-import type { ContainerInfo, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
+import type { ContainerInfo, ContainerStats, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
 
 /** In-memory Runtime for tests. Records every call in `calls`. */
 export class FakeRuntime implements Runtime {
@@ -95,6 +95,17 @@ export class FakeRuntime implements Runtime {
     return [...this.containers.values()]
       .map((c) => c.info)
       .filter((i) => (entries.length ? entries.every(([k, v]) => i.labels[k] === v) : "wtc.setup" in i.labels));
+  }
+  /** per-container stats served by `stats()` (running containers only) */
+  statsByName: Record<string, ContainerStats> = {};
+  async stats(names: string[]) {
+    this.rec("stats", names);
+    const out: Record<string, ContainerStats> = {};
+    for (const n of names) {
+      const c = this.containers.get(n);
+      if (c?.info.state === "running") out[n] = this.statsByName[n] ?? { cpuPercent: 0, memBytes: 0, memLimitBytes: 0 };
+    }
+    return out;
   }
   async port(name: string, containerPort: number) {
     this.rec("port", name, containerPort);

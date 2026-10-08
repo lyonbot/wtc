@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { WtcError } from "../errors";
 import { detectPlatform } from "./platform";
-import type { ContainerInfo, ContainerState, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
+import type { ContainerInfo, ContainerStats, ContainerState, CreateSpec, ExecOpts, ExecResult, PlatformInfo, Runtime, RuntimeMount } from "./types";
 
 export interface SpawnOpts {
   env?: Record<string, string>;
@@ -187,6 +187,17 @@ export class DockerCliRuntime implements Runtime {
     const i = await this.run(["inspect", "--type", "container", "--format", "{{json .}}", ...ids]);
     return lines(i.stdout).map((l) => toInfo(JSON.parse(l)));
   }
+  async stats(names: string[]) {
+    if (!names.length) return {};
+    const r = await this.run(["stats", "--no-stream", "--format", "{{json .}}", ...names], {}, /No such container/i);
+    const out: Record<string, ContainerStats> = {};
+    for (const l of lines(r.stdout)) {
+      const j = JSON.parse(l);
+      const [used, limit] = String(j.MemUsage ?? "").split("/");
+      out[String(j.Name)] = { cpuPercent: parseFloat(j.CPUPerc) || 0, memBytes: parseDockerSize(used), memLimitBytes: parseDockerSize(limit) };
+    }
+    return out;
+  }
   async port(name: string, containerPort: number) {
     const r = await this.run(["port", name, `${containerPort}/tcp`], {}, /No public port|No such/i);
     if (r.exitCode !== 0) return null;
@@ -227,6 +238,12 @@ export class DockerCliRuntime implements Runtime {
   }
 }
 
+const SIZE_UNITS: Record<string, number> = { b: 1, kb: 1e3, mb: 1e6, gb: 1e9, tb: 1e12, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4 };
+/** "12.3MiB" / "1.5GB" (docker stats notation) -> bytes; 0 when unparsable. */
+export function parseDockerSize(s: string | undefined): number {
+  const m = /^\s*([\d.]+)\s*([a-zA-Z]*)\s*$/.exec(s ?? "");
+  return m ? Math.round(Number(m[1]) * (SIZE_UNITS[m[2]!.toLowerCase() || "b"] ?? 0)) : 0;
+}
 function lines(s: string) {
   return s.split("\n").map((l) => l.trim()).filter(Boolean);
 }

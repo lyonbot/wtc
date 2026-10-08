@@ -51,6 +51,13 @@ export interface PlatformInfo {
   /** colima: [homedir]; linux: undefined (any path) */
   bindableRoots?: string[];
 }
+/** One-shot resource usage of a running container. */
+export interface ContainerStats {
+  /** Percent of one core (docker's CPUPerc; may exceed 100 on multi-core). */
+  cpuPercent: number;
+  memBytes: number;
+  memLimitBytes: number;
+}
 export interface Runtime {
   platform(): Promise<PlatformInfo>;
   build(o: { context: string; dockerfile: string; tag: string; buildArgs: Record<string, string>; onLog?: (line: string) => void }): Promise<void>;
@@ -68,6 +75,8 @@ export interface Runtime {
   inspect(name: string): Promise<ContainerInfo | null>;
   /** Includes stopped containers. Empty `labels` = all wtc containers (those carrying label key `wtc.setup`). */
   ps(labels: Record<string, string>): Promise<ContainerInfo[]>;
+  /** Resource usage of the given containers, keyed by container name. Stopped or missing containers are omitted. */
+  stats(names: string[]): Promise<Record<string, ContainerStats>>;
   port(name: string, containerPort: number): Promise<{ hostIp: string; hostPort: number } | null>;
   volumeCreate(name: string, labels: Record<string, string>): Promise<void>;
   volumeRm(name: string): Promise<void>;

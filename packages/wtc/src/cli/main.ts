@@ -3,6 +3,8 @@ import { Command, CommanderError } from "commander";
 import * as lib from "../index";
 import { createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "../index";
 import skillMd from "../../skill/SKILL.md" with { type: "text" };
+import { runTui } from "../tui/app";
+import { createTerm } from "../tui/term";
 import { renderLs, renderSummary, table, upRenderer } from "./render";
 
 /** Virtual modules so a user's wtc.setup.ts can import `defineSetup` without installing the package (also in the compiled binary). */
@@ -151,6 +153,12 @@ export function buildProgram(): Command {
       if (editor && editor !== "code" && editor !== "cursor") throw new UsageError("editor must be code or cursor");
       const r = await w.open(name, editor as "code" | "cursor" | undefined);
       if (cmd.opts().json) json(r); else console.log(r.launched ? `opened ${r.uri}` : `editor not in PATH; URI: ${r.uri}`);
+    }));
+
+  p.command("tui").description("interactive console: live instance list (state / CPU / memory), create form, menu of actions")
+    .action(act(async (w) => {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) throw new UsageError("wtc tui needs an interactive terminal");
+      await runTui({ w, term: createTerm() }).done;
     }));
 
   p.command("gc").description("remove orphaned state").option("--dry-run", "only report").option("--prune-store", "also prune the pnpm store").option("--json", jopt)

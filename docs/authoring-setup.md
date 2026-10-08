@@ -47,6 +47,15 @@ flowchart LR
   - `rm` deletes the container, its `scope: "instance"` volumes and `.wtc/{run,log}/<name>/`; `scope: "setup"` volumes and the shared pnpm store stay.
 - **Validation**: `--set` keys must be declared in `params` (`PARAM_UNKNOWN`). Unknown top-level manifest keys, including the old top-level `mounts` / `hostForwards`, fail with `INVALID_MANIFEST` (for every command, since each loads the manifest).
 
+## Host scripts and param suggestions (`wtc tui`)
+
+`wtc tui` ([packages/wtc/src/tui/](../packages/wtc/src/tui/app.ts)) lists instances live and offers a create form and an action menu. Two optional manifest fields feed it; both run **on the host**:
+
+- **`hostScripts`**: `{ key: { run, description } }`, like `scripts` but executed on the host in the setup dir (e.g. open a browser through the instance's tunnel). Invoked as `bash -c '<run> "$@"' <key> <instance> [args]`, so `$1` is the instance name and `run` gets the args appended; env has `WTC_NAME`, `WTC_SETUP_ID`, `WTC_SETUP_DIR` and the instance's params. Stdio is inherited; a non-zero exit waits for Enter. Menu entries are marked `$` (these, run on the host) or `#` (`scripts`, run in the container); after a script the TUI keeps its output until a key is pressed, then returns to the instance's menu. Implementation: [ops/hostscript.ts](../packages/wtc/src/ops/hostscript.ts).
+- **`params.<KEY>.suggest(input, { setupDir, params })`**: returns candidate values (string array, may be async) for the create form's dropdown, e.g. branch names from `git ls-remote`. Return the **full** list; the form filters locally. It is called once when the field gets focus, a throw / 8s timeout means no dropdown, and the field stays plain text. Implementation: [ops/suggest.ts](../packages/wtc/src/ops/suggest.ts).
+
+A param with a default starts "selected": typing replaces it, `↓` picks from the dropdown, `Tab` / `Enter` completes the highlighted candidate (or moves on when none is highlighted). Example: [wtc.setup.ts](../examples/setup-basic/wtc.setup.ts).
+
 ## Host-side hooks
 
 `hooks` are TS functions that run **on the host** (container-side logic stays in `init.sh` / `preRemove`). Contract and payload types are in the JSDoc of `SetupHooks` ([packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts)); call sites are in [packages/wtc/src/instance/instance.ts](../packages/wtc/src/instance/instance.ts).

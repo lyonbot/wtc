@@ -31,6 +31,7 @@ flowchart LR
 - **Docker** on Linux, or on macOS via [colima](https://github.com/abiosoft/colima). Docker Desktop and OrbStack are untested.
 - **Build from source**: [Bun](https://bun.sh) and [Go](https://go.dev) ≥ 1.25 (see [kit/go/go.mod](kit/go/go.mod)). Go cross-compiles the in-container helper `wtc-kit`.
 - On colima, keep setup directories and bind-mount sources under `$HOME`. colima only shares `$HOME` with its VM.
+- On colima, `wtc open` needs VS Code / Cursor to see colima's socket. colima has no `/var/run/docker.sock`, so a GUI-launched editor fails with "Cannot attach to the container ... no longer exists". Run `launchctl setenv DOCKER_HOST unix://$HOME/.colima/default/docker.sock`, then fully quit and reopen the editor. The setting is per login session (lost on reboot); `.bash_profile` only helps editors started from that shell.
 
 ## Install
 
@@ -72,6 +73,7 @@ The setup is resolved from `--setup <dir>`, then `$WTC_SETUP`, then the nearest 
 | `run <name> <script>`, `check <name>`, `shell <name>` | run a setup script or health checks, or open a shell |
 | `agent <name> <claude\|codex\|custom> [-- args]` | run Claude Code / Codex (or a custom agent from `wtc.setup.ts`) inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
+| `tui` | interactive console: live list (state, CPU, memory), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |
 | `build`, `gc`, `doctor`, `skill` | image build, cleanup, environment check, agent guide |
 
 Most commands take `--json`. The full reference with flags and error codes is [packages/wtc/skill/SKILL.md](packages/wtc/skill/SKILL.md).

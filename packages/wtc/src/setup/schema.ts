@@ -22,6 +22,8 @@ const mount = z.union([
   }).strict(),
 ]);
 
+const fn = z.custom<(...a: any[]) => any>((f) => typeof f === "function", "must be a function");
+
 const param = z.object({
   description: z.string(),
   default: z.string().optional(),
@@ -29,12 +31,12 @@ const param = z.object({
   pattern: z.string().refine((p) => {
     try { new RegExp(p); return true; } catch { return false; }
   }, "pattern is not a valid RegExp").optional(),
+  suggest: fn.optional(),
 });
 
 const envKey = z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "env key must match ^[A-Z_][A-Z0-9_]*$");
 const envSpec = z.record(envKey, z.union([z.string(), z.object({ fromHost: z.string().min(1) }).strict(), z.null()]));
 const cmdName = z.string().regex(/^[A-Za-z0-9._+-]+$/, "must be a plain command name");
-const fn = z.custom<(...a: any[]) => any>((f) => typeof f === "function", "must be a function");
 const agentDef = z.object({
   bin: cmdName,
   pkg: z.string().min(1).optional(),
@@ -101,6 +103,7 @@ export const manifestSchema = z.object({
   params: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/, "param key must match ^[A-Z_][A-Z0-9_]*$"), param).default({}),
   cwd: z.string().default("/workspace"),
   scripts: z.record(z.object({ run: z.string(), description: z.string() })).default({}),
+  hostScripts: z.record(z.object({ run: z.string(), description: z.string() })).default({}),
   checks: z.record(z.object({ run: z.string(), timeout: z.number().positive().default(10) })).default({}),
   socksPort: port.default(1080),
   socksBind: z.string().default("0.0.0.0"),
@@ -224,13 +227,31 @@ export type MountInput =
   | { type: "volume"; external: string; target: string; readonly?: boolean }
   | { type: "bind"; source: string; target: string; readonly?: boolean };
 
+/** Context of a param's `suggest`: the setup dir (host path) and the values entered so far for the other params. */
+export interface SuggestContext {
+  setupDir: string;
+  params: Record<string, string>;
+}
+/**
+ * Completion candidates for a param value, used by `wtc tui`'s create form. Runs on the host; may be async and may
+ * throw (the form then falls back to plain text). `input` is the text typed so far; the caller filters, so returning
+ * the full candidate list is fine.
+ */
+export type ParamSuggest = (input: string, ctx: SuggestContext) => string[] | Promise<string[]>;
+
 export interface Manifest {
   id: string;
   image: { context: string; dockerfile: string; buildArgs: Record<string, string> };
   init: string;
-  params: Record<string, { description: string; default?: string; required?: boolean; pattern?: string }>;
+  params: Record<string, { description: string; default?: string; required?: boolean; pattern?: string; suggest?: ParamSuggest }>;
   cwd: string;
   scripts: Record<string, { run: string; description: string }>;
+  /**
+   * Scripts run on the **host** (cwd = setup dir) by `wtc tui`'s action menu, e.g. opening a browser through the
+   * instance's tunnel. Invoked as `bash -c '<run> "$@"' <key> <instance> [args...]`, so `$1` is the instance name; env also
+   * has `WTC_NAME`, `WTC_SETUP_ID`, `WTC_SETUP_DIR` and the instance's params (by param name).
+   */
+  hostScripts: Record<string, { run: string; description: string }>;
   checks: Record<string, { run: string; timeout: number }>;
   socksPort: number;
   socksBind: string;

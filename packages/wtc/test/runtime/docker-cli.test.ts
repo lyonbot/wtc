@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DockerCliRuntime } from "../../src/runtime/docker-cli";
+import { DockerCliRuntime, parseDockerSize } from "../../src/runtime/docker-cli";
 
 type R = { exitCode: number; stdout: string; stderr: string };
 function mk(reply: (argv: string[]) => Partial<R> = () => ({})) {
@@ -139,4 +139,26 @@ test("exec: input adds -i and is fed to stdin; onLine forwarded", async () => {
   expect(seen[0]!.onLine).toBe(onLine);
   await rt.exec("c", ["true"]);
   expect(calls[1]).toEqual(["docker", "exec", "c", "true"]);
+});
+
+test("stats argv + parsing", async () => {
+  const { rt, calls } = mk(() => ({
+    stdout: [
+      JSON.stringify({ Name: "wtc-s--a", CPUPerc: "12.50%", MemUsage: "256MiB / 7.653GiB" }),
+      JSON.stringify({ Name: "wtc-s--b", CPUPerc: "--", MemUsage: "0B / 0B" }),
+    ].join("\n"),
+  }));
+  const r = await rt.stats(["wtc-s--a", "wtc-s--b"]);
+  expect(calls[0]!.slice(1)).toEqual(["stats", "--no-stream", "--format", "{{json .}}", "wtc-s--a", "wtc-s--b"]);
+  expect(r["wtc-s--a"]).toEqual({ cpuPercent: 12.5, memBytes: 256 * 1024 ** 2, memLimitBytes: Math.round(7.653 * 1024 ** 3) });
+  expect(r["wtc-s--b"]).toEqual({ cpuPercent: 0, memBytes: 0, memLimitBytes: 0 });
+  expect((await mk().rt.stats([]))).toEqual({});
+});
+
+test("parseDockerSize", () => {
+  expect(parseDockerSize("1.5GB")).toBe(1.5e9);
+  expect(parseDockerSize("12KiB")).toBe(12288);
+  expect(parseDockerSize("0B")).toBe(0);
+  expect(parseDockerSize("nonsense")).toBe(0);
+  expect(parseDockerSize(undefined)).toBe(0);
 });

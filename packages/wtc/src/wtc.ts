@@ -10,7 +10,10 @@ import { doctor } from "./ops/doctor";
 import { check, run, shell } from "./ops/exec";
 import { gc } from "./ops/gc";
 import { logs } from "./ops/logs";
+import { runHost } from "./ops/hostscript";
 import { open } from "./ops/open";
+import { stats } from "./ops/stats";
+import { suggest } from "./ops/suggest";
 import { tunnel } from "./ops/tunnel";
 import { DockerCliRuntime } from "./runtime/docker-cli";
 import type { Runtime } from "./runtime/types";
@@ -31,6 +34,12 @@ export interface Wtc {
   status: Fn<"status">;
   watch(name: string, signal?: AbortSignal): AsyncIterable<InstanceSummary>;
   run(name: string, script: string, args: string[]): Promise<number>;
+  /** Run a manifest `hostScripts` entry on the host (inherits stdio); returns its exit code. */
+  runHost(name: string, script: string, args: string[]): Promise<number>;
+  /** Completion candidates for a param (empty when the param has no `suggest` or it fails). */
+  suggest(param: string, input: string, params?: Record<string, string>): Promise<string[]>;
+  /** CPU / memory of running instances, keyed by instance name; {} when the runtime cannot say. */
+  stats(names: string[]): ReturnType<typeof stats>;
   check(name: string): Promise<{ health: Health; items: CheckResult[] }>;
   shell(name: string): Promise<number>;
   /** `agent`: a key of the manifest `agents` (built-in claude / codex or a custom definition) */
@@ -93,6 +102,9 @@ export async function createWtc(o: { setupDir: string; runtime?: Runtime; cacheD
       }
     },
     run: (n, s, a) => run(ctx, n, s, a),
+    runHost: (n, s, a) => runHost(ctx, n, s, a),
+    suggest: (k, i, p) => suggest(setup, k, i, p),
+    stats: (n) => stats(ctx, n),
     check: (n) => check(ctx, n),
     shell: (n) => shell(ctx, n),
     agent: (n, k, a) => agent(ctx, n, k, a),

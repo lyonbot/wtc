@@ -6,10 +6,26 @@ A setup is a directory describing how to build and initialise one container per 
 
 - [wtc.setup.ts](../examples/setup-basic/wtc.setup.ts): `export default defineSetup({...})`; `defineSetup` is imported from `"@lyonbot/wtc/setup"` ([packages/wtc/src/setup/index.ts](../packages/wtc/src/setup/index.ts)). For editor types, put a `package.json` with `@lyonbot/wtc` as a devDependency in the setup dir (template: [package.json](../examples/setup-basic/package.json), [tsconfig.json](../examples/setup-basic/tsconfig.json); its `scripts` can call `wtc` directly); without it the CLI still resolves the import at runtime via a virtual module, but the editor has **no types** (no completion, import shown unresolved) ([packages/wtc/src/cli/main.ts](../packages/wtc/src/cli/main.ts)).
 - Manifest fields, defaults and validation: [packages/wtc/src/setup/schema.ts](../packages/wtc/src/setup/schema.ts) (the only field reference).
-- [image/Dockerfile](../examples/setup-basic/image/Dockerfile): default build context. Editing `init.sh` / `scripts/` never rebuilds the image (they are mounted read-only at `/wtc/setup`).
+- [image/Dockerfile](../examples/setup-basic/image/Dockerfile): default build context. Editing anything in the setup dir (`init.sh`, `scripts/`, ...) never rebuilds the image: the whole dir is mounted read-only at `/wtc/setup`.
 - [init.sh](../examples/setup-basic/init.sh) and [scripts/](../examples/setup-basic/scripts/restart-dev-server.sh): container-side logic.
 - `.wtc/` (gitignored): host-side run state and logs.
 - Relative `bind` mount sources resolve against the setup dir; `~` expands to `$HOME`.
+
+### Container mounts reserved by wtc
+
+Built in [packages/wtc/src/instance/create-spec.ts](../packages/wtc/src/instance/create-spec.ts); user mounts (`container.mounts`) may not target `/wtc` or `/pnpm`.
+
+| Container path | Host source | Access | Purpose |
+|---|---|---|---|
+| `/wtc/bin` | [kit/bin/](../kit/bin) | ro | `wtc-*` helpers, put on `PATH` by `wtc-entry` |
+| `/wtc/setup` | the **whole** setup dir | ro | `init.sh`, `scripts/`, ... Includes `.wtc/`, so other instances' `run/` and `log/` (incl. `config.json` params) are readable |
+| `/wtc/run` | `<setup>/.wtc/run/<name>/` | rw | `status.json`, `remark`, `create.json`, `config.json`, `ssh/` (wtc state: do not delete) |
+| `/wtc/log` | `<setup>/.wtc/log/<name>/` | rw | `init.<bootId>.log` and other logs |
+| `/wtc/ssh` | `<setup>/.wtc/run/<name>/ssh/` | ro | generated ssh `config` / `known_hosts`, copied to `~/.ssh` by `wtc-entry` |
+| `/wtc/ssh-agent.sock` | host ssh-agent socket | rw | forwarded agent; see "Private git over ssh" |
+| `/pnpm` | docker volume `wtc-<setupId>.pnpm` | rw | pnpm store shared by all instances of the setup; survives `wtc rm` |
+
+Write anything persistent to `/wtc/run` or your own `container.mounts` volume, never to `/wtc/setup`.
 
 ## init.sh contract
 

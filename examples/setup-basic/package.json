@@ -2,7 +2,7 @@
   "name": "wtc-setup-basic",
   "private": true,
   "type": "module",
-  "devDependencies": { "@lyonbot/wtc": "^0.1.2" },
+  "devDependencies": { "@lyonbot/wtc": "^0.1.3" },
   "scripts": {
     "up": "wtc up",
     "ls": "wtc ls",

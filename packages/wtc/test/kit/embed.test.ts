@@ -9,7 +9,7 @@ afterAll(() => rmSync(cacheDir, { recursive: true, force: true }));
 
 test("ensureKit extracts executables once", async () => {
   const dir = await ensureKit({ arch: "arm64", cacheDir });
-  const names = ["wtc-entry", "wtc-signal", "wtc-install", "wtc-kit"];
+  const names = ["wtc-entry", "wtc-signal", "wtc-install", "wtc-remark", "wtc-kit"];
   for (const n of names) expect(statSync(join(dir, n)).mode & 0o755).toBe(0o755);
   const before = names.map((n) => statSync(join(dir, n)).mtimeMs);
   await Bun.sleep(20);

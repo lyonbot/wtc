@@ -10,7 +10,7 @@ import type { InstanceContext } from "./instance";
 export function instancePaths(setupDir: string, name: string) {
   const run = join(setupDir, ".wtc", "run", name);
   const log = join(setupDir, ".wtc", "log", name);
-  return { run, log, ssh: join(run, "ssh"), status: join(run, "status.json"), create: join(run, "create.json"), config: join(run, "config.json") };
+  return { run, log, ssh: join(run, "ssh"), status: join(run, "status.json"), remark: join(run, "remark"), create: join(run, "create.json"), config: join(run, "config.json") };
 }
 
 /** `~` → home; relative → against the setup dir. */

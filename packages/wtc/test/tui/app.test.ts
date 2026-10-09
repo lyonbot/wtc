@@ -28,7 +28,7 @@ class FakeTerm implements Term {
 
 const sum = (name: string, state: InstanceSummary["state"], phase: string | null = null): InstanceSummary => ({ name, container: `wtc-demo--${name}`, state, phase, staleImage: false });
 
-function setup() {
+function setup(o: { editor?: string | null; runEditor?: (e: string, i: string) => Promise<{ code: number; text: string }> } = {}) {
   const manifest = manifestSchema.parse({
     id: "demo",
     params: { BRANCH: { description: "branch", default: "master", suggest: () => ["master", "feat/flow"] } },
@@ -53,9 +53,14 @@ function setup() {
     runHost: async (n, s) => (calls.push(["runHost", n, s]), 3),
     open: async (n, e) => (calls.push(["open", n, e]), { uri: "u", launched: true }),
     suggest: async (k) => (calls.push(["suggest", k]), ["master", "feat/flow"]),
+    setRemark: async (n, t) => {
+      calls.push(["setRemark", n, t]);
+      list = list.map((s) => (s.name === n ? { ...s, ...(t ? { remark: t } : {}) } : s));
+      return t || undefined;
+    },
   };
   const term = new FakeTerm();
-  const h = runTui({ w: api, term, pollMs: 60_000 });
+  const h = runTui({ w: api, term, pollMs: 60_000, editor: "editor" in o ? o.editor! : "vi", ...(o.runEditor ? { runEditor: o.runEditor } : {}) });
   const send = async (s: string) => (term.press(s), await h.idle());
   return { h, term, send, calls };
 }
@@ -112,11 +117,80 @@ describe("tui app", () => {
     const { h, term, send, calls } = setup();
     await h.refresh();
     await send("\r");
-    await send("r"); // `#` restart-dev-server (shortcut = first free letter of its name)
+    await send("e"); // `#` restart-dev-server (shortcut = first free letter of its name; `r` is edit remark)
     expect(calls).toContainEqual(["run", "alpha", "restart-dev-server"]);
     expect(term.events).toEqual(["suspend", "waitKey", "resume"]);
     expect(term.frames).toContain("\r\n"); // fresh line after the pause, so the next script's output does not continue the prompt
     expect(term.text).toContain("restart-dev-server");
+  });
+
+  test("edit remark: the box starts with the current text, Enter saves, the list shows it", async () => {
+    const { h, term, send, calls } = setup();
+    await h.refresh();
+    await send("\rr");
+    expect(term.text).toContain("remark · alpha");
+    await send("fixing login");
+    await send("\r");
+    expect(calls).toContainEqual(["setRemark", "alpha", "fixing login"]);
+    await h.refresh();
+    expect(term.text).toContain("remark set for alpha");
+    expect(term.text).toMatch(/alpha .*fixing login/);
+    await send("\rr"); // reopen: prefilled
+    expect(term.text).toContain("> fixing login");
+    await send("\x15\r"); // Ctrl-U + Enter clears
+    expect(calls.at(-1)).toEqual(["setRemark", "alpha", ""]);
+  });
+
+  test("edit remark: Ctrl-J / Alt-Enter add lines, a multi-line paste is kept, Enter saves it all; Ctrl-J elsewhere is Enter", async () => {
+    const { h, term, send, calls } = setup();
+    await h.refresh();
+    await send("\n"); // list: Ctrl-J opens the menu like Enter
+    expect(term.text).toContain("[r] edit remark");
+    await send("r");
+    await send("one\ntwo\x1b\rthree");
+    await send("\x1b[200~four\nfive\x1b[201~");
+    expect(term.text).toMatch(/> one\n\s+two\n\s+threefour\n\s+five/);
+    await send("\r");
+    expect(calls).toContainEqual(["setRemark", "alpha", "one\ntwo\nthree" + "four\nfive"]);
+  });
+
+  test("edit remark: Ctrl-K / Ctrl-U / Alt-B / Ctrl-Y work in the box", async () => {
+    const { h, send, calls } = setup();
+    await h.refresh();
+    await send("\rrhello big world");
+    await send("\x1bb\x0b"); // Alt-B, Ctrl-K: cut "world"
+    await send("\x19\x19\r"); // Ctrl-Y twice
+    expect(calls.at(-1)).toEqual(["setRemark", "alpha", "hello big worldworld"]);
+  });
+
+  test("edit remark: Esc cancels without saving", async () => {
+    const { h, term, send, calls } = setup();
+    await h.refresh();
+    await send("\rrabc\x1b");
+    expect(calls.find((c) => c[0] === "setRemark")).toBeUndefined();
+    expect(term.text).toContain("2 instances");
+  });
+
+  test("edit remark: Ctrl-G opens the editor with the typed text; its result is saved (multi-line)", async () => {
+    const seen: string[] = [];
+    const { h, term, send, calls } = setup({ runEditor: async (e, i) => (seen.push(e, i), { code: 0, text: "l1\nl2" }) });
+    await h.refresh();
+    await send("\rrdraft\x07");
+    expect(seen).toEqual(["vi", "draft"]);
+    expect(term.events).toEqual(["suspend", "resume"]);
+    expect(calls).toContainEqual(["setRemark", "alpha", "l1\nl2"]);
+  });
+
+  test("edit remark: a failing editor keeps the remark; no editor makes Ctrl-G a no-op", async () => {
+    const a = setup({ runEditor: async () => ({ code: 1, text: "ignored" }) });
+    await a.h.refresh();
+    await a.send("\rrx\x07");
+    expect(a.calls.find((c) => c[0] === "setRemark")).toBeUndefined();
+    const b = setup({ editor: null });
+    await b.h.refresh();
+    await b.send("\rrx\x07");
+    expect(b.term.text).toContain("remark · alpha"); // still in the box
+    expect(b.term.text).not.toContain("Ctrl-G");
   });
 
   test("shell hands the whole terminal over and returns to the list", async () => {

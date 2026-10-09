@@ -22,8 +22,9 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc start <name>` / `wtc stop <name>` - stop keeps the overlay filesystem.
 - `wtc restart <name>` - re-run init.sh (use after a failed boot).
 - `wtc rm <name> [--force]` - runs `preRemove`, then deletes container, instance volumes, state.
-- `wtc ls [--json]` - NAME STATE PHASE SOCKS IMAGE.
+- `wtc ls [--json]` - NAME STATE PHASE SOCKS IMAGE REMARK.
 - `wtc status <name> [--watch] [--json]` - state, phase, health, socks, `staleImage`.
+- `wtc remark <name> [text...|-] [--clear] [--json]` - show or set a free-form multi-line note (survives restarts; unlike `container.annotations` it can change any time). `-` reads stdin; text starting with `-` goes after `--`; `--clear` removes. Plain output has control characters stripped; `--json` is exact. In the container, `wtc-remark` does the same (no args: print) so you can report what you are doing.
 - `wtc logs <name> [-f] [--boot <id>]` - init logs.
 - `wtc run [<name>] [--host] [<script>] [-- args]` - manifest script in the container (`scripts`), or on the host with `--host` (`hostScripts`; arbitrary host shell, not sandboxed); exits with its exit code. Without a script it lists both sections (`--json`: `{scripts, hostScripts}`); a script that exists only on the other side fails with `SCRIPT_NOT_FOUND` and a hint. wtc flags (`--host`, `--json`) go before `--`; everything after `--` reaches the script.
 - `wtc check <name> [--json]` - run health checks now.
@@ -31,7 +32,7 @@ Global: `--setup <dir>` or env `WTC_SETUP` (default: search upwards from cwd for
 - `wtc agent <name> <agent> [-- args]` - run Claude Code (`claude`), Codex (`codex`) or a custom agent defined under manifest `agents` in the container's `cwd` with the host login, user MCP servers, skills and plugins synced in; auto-installs the agent via npm when missing; runs with permission prompts / inner sandbox disabled (the container is the sandbox); exits with the agent's code. Extra env/args come from manifest `agents.<agent>`.
 - `wtc tunnel <name> [--json]` - print `socks5h://` URLs and hints. The address may change between calls (e.g. after `rm` + `up`); re-run it rather than reusing an old one.
 - `wtc open <name> [code|cursor]` - open in editor via attached-container URI.
-- `wtc tui` (also bare `wtc` / `wtc --setup <dir>` in a terminal, unless `WTC_NO_TUI`, `CI`, `NONINTERACTIVE`, `TERM=dumb` or an agent marker such as `CLAUDECODE` is set) - interactive console for humans (needs a TTY; never run it as an agent): live instance list with state / CPU / memory, create form, action menu (shell, editor, `scripts`, `hostScripts`).
+- `wtc tui` (also bare `wtc` / `wtc --setup <dir>` in a terminal, unless `WTC_NO_TUI`, `CI`, `NONINTERACTIVE`, `TERM=dumb` or an agent marker such as `CLAUDECODE` is set) - interactive console for humans (needs a TTY; never run it as an agent): live instance list with state / CPU / memory / remark, create form, action menu (shell, editor, edit remark, `scripts`, `hostScripts`).
 - `wtc gc [--dry-run] [--prune-store]` - remove orphaned state; continues past a failed removal and lists it (`--json`: `failed[{kind,name,error}]`, `storeError` = pnpm output tail); exit 1 if any removal or the store prune fails. Refuses with `SETUP_ID_CONFLICT` when another setup dir uses the same `id`.
 - `wtc doctor [--json]` - check runtime, colima mounts, toolchain; warn (not fail) when `NO_PROXY`/`no_proxy` bypasses the tunnel for localhost.
 - `wtc init [dir] [--id <id>] [--json]` - scaffold a new setup (needs no existing setup; refuses to overwrite).
@@ -64,7 +65,7 @@ States: `absent` `stopped` `booting` `ready` `failed`. Names match `^[a-z0-9]+(-
 
 ## JSON output
 
-- `--json` prints the library value: `ls` -> array, `status` -> object with `name, container, state, phase, message?, health?, socks?{bind,port,urls}, staleImage, bootId?`.
+- `--json` prints the library value: `ls` -> array, `status` -> object with `name, container, state, phase, message?, health?, socks?{bind,port,urls}, staleImage, bootId?, remark?`.
 - `up --json` prints newline-delimited events: `{"type":"action"|"status"|"done", ...}`; `done` carries `summary` and, on failure, `logTail`.
 - `check --json` -> `{health, items[{name, ok, exitCode, output, durationMs}]}`; `tunnel --json` -> `{urls, bind, port, auth, hints}`.
 

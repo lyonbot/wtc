@@ -26,6 +26,7 @@ export type { HostEnv } from "./agent/host";
 export * from "./ops/logs";
 export * from "./ops/tunnel";
 export * from "./ops/open";
+export * from "./ops/remark";
 export * from "./ops/hostscript";
 export * from "./ops/suggest";
 export * from "./ops/stats";

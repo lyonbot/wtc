@@ -52,6 +52,18 @@ describe("cli in-process", () => {
     }
   });
 
+  test("remark: set (text after -- may start with -), show sanitised, --json exact, --clear", async () => {
+    const { rt, load } = await withInstance();
+    rt.execHandler = () => ({ exitCode: 127, stdout: "", stderr: "" }); // no kit in the fake container: host write
+    expect((await capture(() => runCli(["bun", "wtc", "remark", "a", "--", "-x", "fix"], load))).code).toBe(0);
+    expect((await capture(() => runCli(["bun", "wtc", "remark", "a"], load))).out).toBe("-x fix");
+    await (await load()).setRemark("a", "ok\x1b]0;pwn\x07\nnext");
+    expect((await capture(() => runCli(["bun", "wtc", "remark", "a"], load))).out).toBe("ok]0;pwn\nnext");
+    expect(JSON.parse((await capture(() => runCli(["bun", "wtc", "remark", "a", "--json"], load))).out)).toEqual({ name: "a", remark: "ok\x1b]0;pwn\x07\nnext" });
+    expect((await capture(() => runCli(["bun", "wtc", "remark", "a", "--clear"], load))).code).toBe(0);
+    expect((await capture(() => runCli(["bun", "wtc", "remark", "a", "--json"], load))).out).toBe(JSON.stringify({ name: "a", remark: null }, null, 2));
+  });
+
   test("run passes through the child's exit code", async () => {
     const { rt, load } = await withInstance();
     rt.execHandler = () => ({ exitCode: 3, stdout: "", stderr: "" });

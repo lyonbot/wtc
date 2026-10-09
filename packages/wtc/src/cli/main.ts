@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command, CommanderError } from "commander";
 import * as lib from "../index";
-import { createWtc, FakeRuntime, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "../index";
+import { createWtc, FakeRuntime, plainRemark, resolveSetupDir, WtcError, WTC_VERSION, type Wtc } from "../index";
 import { findLocalWtc, runForwarded } from "../../bin/forward.js";
 import skillMd from "../../skill/SKILL.md" with { type: "text" };
 import { runTui } from "../tui/app";
@@ -168,6 +168,19 @@ export function buildProgram(): Command {
       if (editor && editor !== "code" && editor !== "cursor") throw new UsageError("editor must be code or cursor");
       const r = await w.open(name, editor as "code" | "cursor" | undefined);
       if (cmd.opts().json) json(r); else console.log(r.launched ? `opened ${r.uri}` : `editor not in PATH; URI: ${r.uri}`);
+    }));
+
+  p.command("remark <name> [text...]").description("show or set the instance remark: free-form, multi-line note shared with the container (`wtc-remark` inside); text `-` reads stdin, text starting with `-` goes after `--`")
+    .option("--clear", "remove the remark").option("--json", jopt)
+    .action(act(async (w, cmd, name: string, text: string[] = []) => {
+      const o = cmd.opts();
+      if (o.clear && text.length) throw new UsageError("--clear takes no text");
+      const set = o.clear || text.length > 0;
+      const value = set
+        ? await w.setRemark(name, o.clear ? "" : text.length === 1 && text[0] === "-" ? await Bun.stdin.text() : text.join(" "))
+        : await w.remark(name);
+      if (o.json) json({ name, remark: value ?? null });
+      else if (!set && value !== undefined) console.log(plainRemark(value)); // container-writable: never raw, even into a pipe (--json is exact)
     }));
 
   p.command("tui").description("interactive console: live instance list (state / CPU / memory), create form, menu of actions")

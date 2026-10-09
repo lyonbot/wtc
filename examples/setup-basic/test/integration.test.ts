@@ -159,6 +159,21 @@ describe.skipIf(!IT)("setup-basic (real docker)", () => {
     expect((await viaSocks(socks.a!)).stdout).toBe("hello from a\n");
   }, 5 * MIN);
 
+  test("remark: container <-> host, multi-line, survives restart", async () => {
+    const inner = (...args: string[]) => rt.exec(`wtc-${ID}--a`, ["/wtc/bin/wtc-remark", ...args]);
+    expect((await inner("running", "tests")).exitCode).toBe(0);
+    expect(await w.remark("a")).toBe("running tests");
+    expect((await w.status("a")).remark).toBe("running tests");
+    await w.setRemark("a", "from host\nsecond line");
+    expect((await inner()).stdout).toBe("from host\nsecond line\n");
+    expect((await w.ls()).find((i) => i.name === "a")?.remark).toBe("from host\nsecond line");
+    await w.restart("a");
+    expect((await drain(w.up("a", {}))).summary.state).toBe("ready");
+    expect(await w.remark("a")).toBe("from host\nsecond line");
+    expect((await inner("--clear")).exitCode).toBe(0);
+    expect(await w.remark("a")).toBeUndefined();
+  }, 5 * MIN);
+
   test("preRemove veto, then rm --force removes container, instance volumes and state", async () => {
     const c = `wtc-${ID}--a`;
     await rt.exec(c, ["touch", "/workspace/app/.keep"]);

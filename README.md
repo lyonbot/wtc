@@ -51,7 +51,8 @@ Try the reference setup [examples/setup-basic](examples/setup-basic). It runs a 
 cd examples/setup-basic
 wtc up feat-a                 # build image, create container, block until ready / failed
 wtc up feat-b --set APP_GREETING=hi
-wtc ls                        # NAME STATE PHASE SOCKS IMAGE
+wtc ls                        # NAME STATE PHASE SOCKS IMAGE REMARK
+wtc remark feat-a "fixing login bug"   # note shown by ls / tui; inside the container: wtc-remark
 wtc tunnel feat-a             # prints socks5h://<ip>:<port> URLs
 NO_PROXY= no_proxy= curl --socks5-hostname <ip:port from tunnel> http://127.0.0.1:5173/   # -> hello from feat-a
 wtc run feat-a restart-dev-server
@@ -80,7 +81,7 @@ If the setup has its own `@lyonbot/wtc` in `node_modules` at a different version
 | `run [--host] <name> <script>`, `check <name>`, `shell <name>` | run a setup script (in the container, or a `hostScripts` entry on the host with `--host`; bare `run` lists both), health checks, or open a shell |
 | `agent <name> <claude\|codex\|custom> [-- args]` | run Claude Code / Codex (or a custom agent from `wtc.setup.ts`) inside the container with your host login ([details](docs/authoring-setup.md#coding-agents-wtc-agent)) |
 | `tunnel <name>`, `open <name> [code\|cursor]` | SOCKS URLs; open the container in an editor |
-| `tui` (or bare `wtc` in a terminal) | interactive console: live list (state, CPU, memory), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |
+| `tui` (or bare `wtc` in a terminal) | interactive console: live list (state, CPU, memory, remark), create form with param completion, per-instance action menu ([details](docs/authoring-setup.md#host-scripts-and-param-suggestions-wtc-tui)) |
 | `build`, `gc`, `doctor`, `skill` | image build, cleanup, environment check, agent guide |
 
 Most commands take `--json`. The full reference with flags and error codes is [packages/wtc/skill/SKILL.md](packages/wtc/skill/SKILL.md).

@@ -18,6 +18,7 @@ Runs on every container boot (including VM/colima restarts, `wtc restart`). Impl
 - **Idempotent**: guard clone/copy steps (see the `[ ! -d ... ]` check in the example).
 - **Must exit.** Exit code `0` = `ready`, non-zero = `failed`; exceeding `readyTimeout` also fails it. There is no separate ready signal.
 - **Progress**: `wtc-signal phase <name> [msg]` ([kit/bin/wtc-signal](../kit/bin/wtc-signal)). Conventional names: `clone`, `install`, `start`.
+- **Remark**: `wtc-remark [text|-|--clear]` ([kit/bin/wtc-remark](../kit/bin/wtc-remark)) reads or sets a free-form note shown by `wtc ls` / `tui` (host: `wtc remark`). Unlike `phase`, it survives restarts.
 - **Install**: `wtc-install [-C dir] [pnpm args]` ([kit/bin/wtc-install](../kit/bin/wtc-install)). Signals `install`, takes a shared lock on the pnpm store, runs `pnpm install --frozen-lockfile --prefer-offline`.
 - **Long-running services** (dev servers): start detached in tmux, wait for them to be healthy, then exit. See [restart-dev-server.sh](../examples/setup-basic/scripts/restart-dev-server.sh).
 - Output is teed to `.wtc/log/<name>/init.<bootId>.log` (`wtc logs`).

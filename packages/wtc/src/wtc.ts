@@ -12,6 +12,7 @@ import { gc } from "./ops/gc";
 import { logs } from "./ops/logs";
 import { runHost } from "./ops/hostscript";
 import { open } from "./ops/open";
+import { getRemark, setRemark } from "./ops/remark";
 import { stats } from "./ops/stats";
 import { suggest } from "./ops/suggest";
 import { tunnel } from "./ops/tunnel";
@@ -49,6 +50,10 @@ export interface Wtc {
   open(name: string, editor?: "code" | "cursor"): ReturnType<typeof open>;
   gc(o?: { dryRun?: boolean; pruneStore?: boolean }): ReturnType<typeof gc>;
   doctor(): ReturnType<typeof doctor>;
+  /** Read the instance remark (undefined when empty); see ops/remark.ts. */
+  remark(name: string): Promise<string | undefined>;
+  /** Replace the remark; "" clears it. Returns the stored value. */
+  setRemark(name: string, text: string): Promise<string | undefined>;
 }
 export type { UpEvent };
 
@@ -113,5 +118,7 @@ export async function createWtc(o: { setupDir: string; runtime?: Runtime; cacheD
     open: (n, e) => open(ctx, n, e),
     gc: (x) => gc(ctx, x),
     doctor: () => doctor(ctx),
+    remark: (n) => getRemark(ctx, n),
+    setRemark: (n, t) => setRemark(ctx, n, t),
   };
 }

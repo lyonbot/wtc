@@ -1,13 +1,16 @@
 import type { InstanceSummary } from "../instance/instance";
 import { ID_RE } from "../naming";
-import { fit, fmtBytes, fmtCpu, padEnd, st } from "./format";
+import { plainRemark, remarkHead } from "../ops/remark";
+import { clip, fit, fmtBytes, fmtCpu, graphemes, padEnd, st } from "./format";
 import { renderLine, type Line } from "./keys";
+import { layout } from "./textarea";
 
 export interface Row {
   name: string;
   state: InstanceSummary["state"];
   phase: string | null;
   message?: string;
+  remark?: string;
   cpu?: number;
   mem?: number;
   staleImage?: boolean;
@@ -26,6 +29,17 @@ export const defaultSel = (items: ListItem[]): number => (items.length > 1 ? 0 :
 
 const stateStyle = (s: Row["state"]): ((t: string) => string) =>
   s === "ready" ? st.green : s === "failed" ? st.red : s === "booting" ? st.yellow : st.dim;
+
+/** Max lines of the selected instance's full remark shown under the list (long lines are wrapped). */
+const DETAIL_MAX = 6;
+
+/** The selected remark as wrapped display lines (same wrapping as the edit box), cut to `max` lines with a closing `…`. */
+export function remarkDetail(remark: string, w: number, max = DETAIL_MAX): string[] {
+  if (max < 1) return [];
+  const cs = graphemes(plainRemark(remark));
+  const all = layout(cs, Math.max(10, w - 2)).map((r) => cs.slice(r.start, r.end).join("").replace(/ +$/, ""));
+  return all.length <= max ? all : [...all.slice(0, max - 1), "…"];
+}
 
 export interface ListView {
   setupId: string;
@@ -49,8 +63,12 @@ export function renderList(v: ListView, w: number, h: number): string[] {
   out.push(`${st.cyan("filter")} ${renderLine(v.filter, st.inv)}`);
   const nameW = Math.max(4, ...v.rows.map((r) => r.name.length));
   const phaseW = Math.max(5, ...v.rows.map((r) => (r.phase ?? "-").length));
-  out.push(st.dim(`  ${padEnd("NAME", nameW)}  ${padEnd("STATE", 8)}  ${padEnd("PHASE", phaseW)}  ${padEnd("CPU", 6)}  MEM`));
-  const room = Math.max(1, h - out.length - 2);
+  out.push(st.dim(`  ${padEnd("NAME", nameW)}  ${padEnd("STATE", 8)}  ${padEnd("PHASE", phaseW)}  ${padEnd("CPU", 6)}  ${padEnd("MEM", 6)}  REMARK`));
+  const remarkW = Math.max(6, w - (2 + nameW + 2 + 8 + 2 + phaseW + 2 + 6 + 2 + 6 + 2));
+  const cur = items[v.sel];
+  // header lines + one list row + heading + msg + help must fit: on a short screen the detail shrinks (or goes) first
+  const detail = cur?.kind === "instance" && cur.row.remark ? remarkDetail(cur.row.remark, w, Math.min(DETAIL_MAX, h - out.length - 4)) : [];
+  const room = Math.max(1, h - out.length - 2 - (detail.length ? detail.length + 1 : 0));
   const top = Math.max(0, Math.min(v.sel - room + 1, items.length - room));
   items.slice(top, top + room).forEach((it, i) => {
     const on = top + i === v.sel;
@@ -59,11 +77,12 @@ export function renderList(v: ListView, w: number, h: number): string[] {
     else {
       const r = it.row;
       const cell = (s: string, wd: number) => padEnd(s, wd);
-      text = `${on ? ">" : " "} ${cell(r.name, nameW)}  ${stateStyle(r.state)(cell(r.state, 8))}  ${cell(r.phase ?? "-", phaseW)}  ${cell(fmtCpu(r.cpu), 6)}  ${fmtBytes(r.mem)}`;
+      text = `${on ? ">" : " "} ${cell(r.name, nameW)}  ${stateStyle(r.state)(cell(r.state, 8))}  ${cell(r.phase ?? "-", phaseW)}  ${cell(fmtCpu(r.cpu), 6)}  ${padEnd(fmtBytes(r.mem), 6)}  ${clip(remarkHead(r.remark), remarkW)}`;
     }
     out.push(on ? st.inv(padEnd(fit(text, w), w).replace(/\x1b\[0m/g, "\x1b[0m\x1b[7m")) : text);
   });
-  while (out.length < h - 2) out.push("");
+  while (out.length < h - 2 - (detail.length ? detail.length + 1 : 0)) out.push("");
+  if (detail.length) out.push(st.dim("─ remark ─"), ...detail);
   out.push(v.msg ? st.yellow(v.msg) : "");
   out.push(st.dim("type to filter · ↑↓ select · Enter menu · Esc clear/quit · wtc --help: CLI"));
   return out.map((l) => fit(l, w));

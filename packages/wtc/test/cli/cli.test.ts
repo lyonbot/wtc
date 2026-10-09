@@ -23,7 +23,7 @@ describe("cli", () => {
 
   test("--help lists all commands", async () => {
     const r = await wtc(["--help"]);
-    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "gc", "skill", "doctor", "init"])
+    for (const c of ["build", "up", "start", "stop", "restart", "rm", "ls", "status", "logs", "run", "check", "shell", "agent", "tunnel", "open", "remark", "gc", "skill", "doctor", "init"])
       expect(r.out).toContain(c);
   });
 
@@ -60,6 +60,14 @@ describe("cli", () => {
     expect(h.err).toContain("wtc run x restart-dev-server");
     const n = await wtc(["run", "x", "nope"], { WTC_SETUP: ex });
     expect(n.err).toContain("hint: `wtc run` lists all scripts");
+  });
+
+  test("remark: --clear with text is a usage error; unknown instance is NOT_FOUND", async () => {
+    const u = await wtc(["remark", "a", "x", "--clear"], { WTC_SETUP: fixture });
+    expect(u.code).toBe(2);
+    const n = await wtc(["remark", "nope"], { WTC_SETUP: fixture });
+    expect(n.code).toBe(1);
+    expect(n.err).toContain("does not exist");
   });
 
   test("ls --json with fake runtime prints []", async () => {

@@ -6,15 +6,20 @@ import { line, editLine, type Key, type Line } from "./keys";
 import { defaultSel, listItems, renderList, type Row } from "./list";
 import { buildMenu, renderMenu, type MenuItem } from "./menu";
 import { formKey, newForm, renderForm, type FormState } from "./form";
+import { boxDims, newRemarkEdit, remarkKey, renderRemarkEdit, resolveEditor, runEditor, type RemarkEdit } from "./remark";
 import type { Term } from "./term";
 
 /** The slice of the facade the TUI uses (tests pass a stub). */
-export type TuiApi = Pick<Wtc, "setup" | "ls" | "stats" | "up" | "rm" | "status" | "shell" | "run" | "runHost" | "open" | "suggest">;
+export type TuiApi = Pick<Wtc, "setup" | "ls" | "stats" | "up" | "rm" | "status" | "shell" | "run" | "runHost" | "open" | "suggest" | "setRemark">;
 export interface TuiDeps {
   w: TuiApi;
   term: Term;
   /** refresh interval of the instance list (default 2000) */
   pollMs?: number;
+  /** editor command for Ctrl-G in the remark box (default: `$EDITOR`, else `vi`, else none) */
+  editor?: string | null;
+  /** runs the editor on `initial`; tests replace it (default opens the real one on the terminal) */
+  runEditor?: (editor: string, initial: string) => Promise<{ code: number; text: string }>;
 }
 /** Handle for tests: resolves when the app quit; `idle()` resolves when all queued key handling finished. */
 export interface TuiHandle {
@@ -29,7 +34,7 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export function runTui(d: TuiDeps): TuiHandle {
   const { w, term } = d;
   const m = w.setup.manifest;
-  let screen: "list" | "menu" | "form" | "confirm" | "inspect" = "list";
+  let screen: "list" | "menu" | "form" | "confirm" | "inspect" | "remark" = "list";
   let filter: Line = line();
   /** selected instance name; null = the create row; undefined = nothing chosen yet (follow the default) */
   let selName: string | null | undefined;
@@ -41,6 +46,8 @@ export function runTui(d: TuiDeps): TuiHandle {
   let msg = "";
   let menu: { row: Row; items: MenuItem[]; sel: number } | undefined;
   let form: FormState | undefined;
+  let remarkEdit: RemarkEdit | undefined;
+  const editor = d.editor !== undefined ? d.editor : resolveEditor();
   let confirmName = "";
   let inspect: string[] = [];
   let suspended = false;
@@ -70,6 +77,7 @@ export function runTui(d: TuiDeps): TuiHandle {
     const { cols, rows: h } = term.size();
     let lines: string[];
     if (screen === "menu" && menu) lines = renderMenu(menu.row.name, menu.items, menu.sel, cols, h, msg);
+    else if (screen === "remark" && remarkEdit) lines = renderRemarkEdit(remarkEdit, cols, h, !!editor);
     else if (screen === "form" && form) lines = renderForm(form, cols, h);
     else if (screen === "confirm") lines = [`delete ${confirmName}?`, "", "removes the container, its volumes and state.", "", "[y] delete   [any other key] cancel"].map((l) => fit(l, cols));
     else if (screen === "inspect") lines = [...inspect, "", "press any key"].map((l) => fit(l, cols));
@@ -86,7 +94,7 @@ export function runTui(d: TuiDeps): TuiHandle {
       const seen = new Set(list.map((s) => s.name));
       for (const n of seen) pending.delete(n);
       rows = [
-        ...list.map((s): Row => ({ name: s.name, state: s.state, phase: s.phase, ...(s.message ? { message: s.message } : {}), staleImage: s.staleImage })).map(withStats),
+        ...list.map((s): Row => ({ name: s.name, state: s.state, phase: s.phase, ...(s.message ? { message: s.message } : {}), ...(s.remark ? { remark: s.remark } : {}), staleImage: s.staleImage })).map(withStats),
         ...[...pending].filter(([n]) => !seen.has(n)).map(([name, phase]): Row => ({ name, state: "booting", phase })),
       ].sort((a, b) => (a.name < b.name ? -1 : 1));
       loaded = true;
@@ -153,6 +161,10 @@ export function runTui(d: TuiDeps): TuiHandle {
       } catch (e) {
         msg = errText(e);
       }
+    } else if (a.type === "remark") {
+      remarkEdit = newRemarkEdit(row.name, row.remark ?? "");
+      screen = "remark";
+      term.keyProtocol?.(true); // lets terminals that support it report Ctrl-Enter
     } else if (a.type === "inspect") {
       try {
         inspect = renderSummary(await w.status(row.name)).split("\n");
@@ -163,6 +175,21 @@ export function runTui(d: TuiDeps): TuiHandle {
     } else {
       confirmName = row.name;
       screen = "confirm";
+    }
+  }
+
+  function leaveRemark() {
+    screen = "list";
+    term.keyProtocol?.(false);
+  }
+
+  async function saveRemark(name: string, text: string) {
+    try {
+      const v = await w.setRemark(name, text);
+      msg = v ? `remark set for ${name}` : `remark cleared for ${name}`;
+      wake?.();
+    } catch (e) {
+      msg = errText(e);
     }
   }
 
@@ -207,6 +234,7 @@ export function runTui(d: TuiDeps): TuiHandle {
 
   // ---- keys ----------------------------------------------------------------------------------------------------
   async function onKey(k: Key) {
+    if (k.name === "newline" && screen !== "remark") k = { name: "enter" }; // Ctrl-J = Enter everywhere but the remark box
     if (k.name === "ctrl-c") return void (await stop());
     if (screen === "inspect") screen = "list";
     else if (screen === "confirm") {
@@ -225,6 +253,23 @@ export function runTui(d: TuiDeps): TuiHandle {
       else if (k.name === "char") {
         const it = mu.items.find((x) => x.key === k.ch);
         if (it) await choose(it, mu.row);
+      }
+    } else if (screen === "remark" && remarkEdit) {
+      const { cols, rows: h } = term.size();
+      const [ns, res] = remarkKey(remarkEdit, k, boxDims(cols, h));
+      remarkEdit = ns;
+      if (res.type === "cancel") leaveRemark();
+      else if (res.type === "save") {
+        leaveRemark();
+        await saveRemark(ns.name, res.text);
+      } else if (res.type === "editor" && editor) {
+        const name = ns.name;
+        let out: { code: number; text: string } | undefined;
+        leaveRemark();
+        await external(async () => ((out = await (d.runEditor ?? runEditor)(editor, ns.ta.text)), out.code));
+        screen = "list";
+        if (out && out.code === 0) await saveRemark(name, out.text);
+        else msg = "editor failed, remark unchanged";
       }
     } else if (screen === "form" && form) {
       const [nf, res] = formKey(form, k);

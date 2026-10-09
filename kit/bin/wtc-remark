@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Usage: wtc-remark            print the remark
+#        wtc-remark <text...>  set it (args joined by spaces)
+#        wtc-remark -          set it from stdin (multi-line ok)
+#        wtc-remark --clear    remove it
+# The remark is one free-form string shared with the host (`wtc remark <name>`, `wtc ls`, TUI); it survives restarts.
+# Writes happen in place (no rename / delete): the host side does the same, see packages/wtc/src/ops/remark.ts.
+set -euo pipefail
+WTC_RUN="${WTC_RUN:-/wtc/run}"
+f="$WTC_RUN/remark"
+if [ $# -eq 0 ]; then
+  text="$(cat "$f" 2>/dev/null || true)"
+  [ -z "$text" ] || printf '%s\n' "$text"
+  exit 0
+fi
+case "$1" in
+  --clear) text="" ;;
+  -) text="$(cat)" ;; # command substitution drops trailing newlines, like the host side
+  *) text="$*" ;;
+esac
+printf '%s' "$text" > "$f"

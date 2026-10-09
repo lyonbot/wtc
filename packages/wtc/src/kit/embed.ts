@@ -6,6 +6,7 @@ import { WTC_VERSION } from "../version";
 import entry from "../../kit/bin/wtc-entry" with { type: "file" };
 import signal from "../../kit/bin/wtc-signal" with { type: "file" };
 import install from "../../kit/bin/wtc-install" with { type: "file" };
+import remark from "../../kit/bin/wtc-remark" with { type: "file" };
 import kitAmd64 from "../../kit/dist/linux-amd64/wtc-kit" with { type: "file" };
 import kitArm64 from "../../kit/dist/linux-arm64/wtc-kit" with { type: "file" };
 
@@ -19,6 +20,7 @@ export async function ensureKit(o: { arch: "amd64" | "arm64"; cacheDir?: string 
     ["wtc-entry", entry],
     ["wtc-signal", signal],
     ["wtc-install", install],
+    ["wtc-remark", remark],
     ["wtc-kit", o.arch === "amd64" ? kitAmd64 : kitArm64],
   ];
   const contents = await Promise.all(files.map(([, src]) => readFile(src)));

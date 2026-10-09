@@ -8,6 +8,7 @@ import type { LoadedSetup } from "../setup/load";
 import type { BootEvent, ConfigSnapshot } from "../setup/schema";
 import { type InstanceState, mergeState, readStatus } from "../status/status";
 import { build, hasImage } from "../ops/build";
+import { readRemark } from "../ops/remark";
 import { assertBindSourcesExist, resolveContainer } from "./container";
 import { acquireCreate } from "./lock";
 import { assertBindable, buildCreateSpec, instancePaths, resolveBindSource } from "./create-spec";
@@ -40,6 +41,8 @@ export interface InstanceSummary {
   bootId?: string;
   /** `container.annotations` as saved on the container (docker labels `wtc.ann.<key>`); absent when none. */
   annotations?: Record<string, string>;
+  /** Mutable free-form note shared by host and container (`wtc remark`); absent when empty. See ops/remark.ts. */
+  remark?: string;
 }
 
 export type UpEvent =
@@ -100,6 +103,8 @@ export async function summarize(ctx: InstanceContext, name: string, info: Contai
   };
   if (merged.message !== undefined) s.message = merged.message;
   if (merged.bootId !== undefined) s.bootId = merged.bootId;
+  const remark = await readRemark(p.remark);
+  if (remark !== undefined) s.remark = remark;
   const ann = Object.entries(info?.labels ?? {}).filter(([k]) => k.startsWith(ANNOTATION_LABEL_PREFIX));
   if (ann.length) s.annotations = Object.fromEntries(ann.map(([k, v]) => [k.slice(ANNOTATION_LABEL_PREFIX.length), v]));
   const port = Number(info?.labels[LABEL.socksHostPort]);
@@ -189,6 +194,7 @@ async function* createInstance(
   const { warnings } = await prepareSshDir({ dir: p.ssh, knownHosts: m.ssh.knownHosts, home: ctx.home });
   for (const w of warnings) yield { type: "action", action: "create", detail: `warning: ${w}` };
   await mkdir(p.run, { recursive: true });
+  await writeFile(p.remark, "", { flag: "a" }); // exists before the container starts; see setRemark for why it is never recreated
   await mkdir(p.log, { recursive: true });
 
   const socksBind = o.socksBind ?? m.socksBind;

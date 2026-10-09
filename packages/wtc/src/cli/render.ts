@@ -1,4 +1,5 @@
 import type { InstanceSummary, UpEvent } from "../index";
+import { plainRemark, remarkHead } from "../ops/remark";
 
 export function table(rows: string[][]): string {
   const w = rows[0]!.map((_, i) => Math.max(...rows.map((r) => (r[i] ?? "").length)));
@@ -8,8 +9,8 @@ export function table(rows: string[][]): string {
 export function renderLs(list: InstanceSummary[]): string {
   if (!list.length) return "(no instances)";
   return table([
-    ["NAME", "STATE", "PHASE", "SOCKS", "IMAGE"],
-    ...list.map((s) => [s.name, s.state, s.phase ?? "-", s.socks ? `${s.socks.bind}:${s.socks.port}` : "-", s.staleImage ? "stale" : "current"]),
+    ["NAME", "STATE", "PHASE", "SOCKS", "IMAGE", "REMARK"],
+    ...list.map((s) => [s.name, s.state, s.phase ?? "-", s.socks ? `${s.socks.bind}:${s.socks.port}` : "-", s.staleImage ? "stale" : "current", remarkHead(s.remark)]),
   ]);
 }
 
@@ -19,6 +20,7 @@ export function renderSummary(s: InstanceSummary): string {
   if (s.message) l.push(`message: ${s.message}`);
   if (s.socks) l.push(`socks:   ${s.socks.urls.join(", ")}`);
   for (const [k, v] of Object.entries(s.annotations ?? {})) l.push(`ann:     ${k}=${v}`);
+  if (s.remark) l.push(`remark:  ${plainRemark(s.remark).replace(/\n/g, "\n         ")}`);
   if (s.staleImage) l.push("image:   stale (run `wtc build`, then rm + up to recreate)");
   return l.join("\n");
 }

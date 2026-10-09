@@ -93,11 +93,11 @@ describe("menu", () => {
     expect(chrome.key).toBe("h"); // "c" is taken by Cursor
     const restart = items.find((i) => i.action.type === "script" && i.action.script === "restart-dev-server")!;
     expect(restart.tag).toBe("container");
-    expect(["s", "c", "v", "i", "d", "h"]).not.toContain(restart.key);
+    expect(["s", "c", "v", "i", "r", "d", "h"]).not.toContain(restart.key);
   });
   test("stopped instances get no shell or scripts", () => {
     const keys = buildMenu(m, row("a", "stopped")).map((i) => i.action.type);
-    expect(keys).toEqual(["open", "open", "inspect", "delete"]);
+    expect(keys).toEqual(["open", "open", "inspect", "remark", "delete"]);
   });
 });
 

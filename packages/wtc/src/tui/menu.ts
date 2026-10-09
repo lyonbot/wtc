@@ -6,6 +6,7 @@ export type MenuAction =
   | { type: "shell" }
   | { type: "open"; editor: "code" | "cursor" }
   | { type: "inspect" }
+  | { type: "remark" }
   | { type: "delete" }
   | { type: "script"; where: "container" | "host"; script: string };
 
@@ -20,7 +21,7 @@ export interface MenuItem {
   action: MenuAction;
 }
 
-const FIXED = { s: "shell", c: "open in Cursor", v: "open in VS Code", i: "inspect", d: "delete" } as const;
+const FIXED = { s: "shell", c: "open in Cursor", v: "open in VS Code", i: "inspect", r: "edit remark", d: "delete" } as const;
 /** states in which the container is running, so shell / scripts can work */
 const LIVE: Row["state"][] = ["ready", "booting", "failed"];
 
@@ -32,6 +33,7 @@ export function buildMenu(m: Pick<Manifest, "scripts" | "hostScripts">, row: Row
   items.push({ key: "c", label: FIXED.c, action: { type: "open", editor: "cursor" } });
   items.push({ key: "v", label: FIXED.v, action: { type: "open", editor: "code" } });
   items.push({ key: "i", label: FIXED.i, action: { type: "inspect" } });
+  items.push({ key: "r", label: FIXED.r, action: { type: "remark" } });
   items.push({ key: "d", label: FIXED.d, action: { type: "delete" } });
   const used = new Set(Object.keys(FIXED));
   const pick = (name: string): string => {
